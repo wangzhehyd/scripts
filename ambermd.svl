@@ -1,0 +1,3026 @@
+#svl
+//	ambermd.svl		AMBER MD Engine Interface
+//
+//	26-oct-2020 (me) use amber20 default softcore
+//	16-sep-2020 (ms) _fmkdir to prevent crashes when running from jobdir
+//	01-sep-2020 (ms) emit amber_init.sh _before_ moe_u.sh
+//	08-apr-2020 (me) added return value to AMBER_Initialize
+//	05-mar-2020 (mk) added helpPage
+//	25-feb-2020 (me) CPU emin in TI to 1000 and use double-precision pmemd
+//	17-feb-2020 (me) CPU emin in TI to 1.0 kcal/mol and no pmemd constraint
+//	06-feb-2020 (na) updated hpc_Script call for postproc flag
+//	05-feb-2020 (mk) utf-8 sweep
+//	04-feb-2020 (na) sweep for hpc batch files to use the MOEBATCH wrapper
+//	22-jan-2020 (me) fixed path to amber_md.sh / adjusted default options
+//	28-aug-2019 (me) general run.sh fixes / set tid to 1
+//	25-apr-2019 (pl) fixed abs filename in -ref argument
+//	15-apr-2019 (pl) fixed edge argument processing
+//	29-mar-2019 (pl) fixed autocorrelation n_eff calculation
+//	25-mar-2019 (pl) external amber.sh, no sampling in error estimates
+//	11-mar-2019 (pl) updated beta, Fejer integration
+//	15-feb-2019 (pl) updated hpc_Script calling sequence
+//	11-feb-2019 (pl) fan planner
+//	08-feb-2019 (me) softcore alpha=0.2, update: 1
+//	06-feb-2019 (pl) added opt_hpc
+//	03-feb-2019 (pl) analysis at end, skip, dG(exp), dG(mmgb)
+//	20-dec-2018 (me) harder softcore alpha=0.25
+//	10-dec-2018 (pl) proper solvation of charged ligands, pcharges once
+//	30-nov-2018 (me) allow for restart of incomplete windows
+//	28-nov-2018 (me) protect against mixed charge model for ligands
+//	27-nov-2018 (pl) reorder atoms for charge calculation
+//	15-nov-2018 (pl) fix dQ plan.mdb calculation
+//	13-nov-2018 (pl) protect PartialCharge call
+//	24-oct-2018 (me) fixed queue dependencies
+//	16-oct-2018 (pl) added n_eff observations for error bar of mean
+//	14-oct-2018 (pl) added TI analyze panel dbv attachment
+//	01-oct-2018 (pl) added parallel scripts
+//	20-sep-2018 (pl) added UI
+//	12-aug-2018 (me) fixed SHAKE for emin and run
+//	31-jul-2018 (pl) improved TI analysis (filtering / panel)
+//	26-jul-2018 (pl) small core detection near center of mass
+//	22-jul-2018 (pl) cleaned up options
+//	17-jul-2018 (me) re-added common-core detection, deletion delay
+//	04-jul-2018 (me) fclose fcfg, min margin controlled by solvate.svl
+//	27-jun-2018 (me) MPI submission fix
+//	22-jun-2018 (pl) added AM1-BCC charge support for TI
+//	19-jun-2018 (me) switch to Monte Carlo barostat
+//	06-jun-2018 (pl) fixed chebyshev integration weights
+//	05-jun-2018 (me) fixed small typo in TI protocol
+//	17-may-2018 (pl) added TI support
+//	07-may-2018 (me) fixed pressure unit
+//	08-mar-2018 (me) fixed default exe in windows/linux script
+//	22-jan-2018 (al) fix null in select
+//	16-jan-2018 (me) Fix for Berendsen barostat
+//	15-jan-2018 (me) Change to Langevin Thermostat + fix T-ramp
+//	02-dec-2017 (em) Combined Coord/Velocity output support
+//	27-nov-2017 (em) fix start time, name of coor file
+//	19-oct-2017 (em) Tether and fixed atom support
+//	11-oct-2017 (em) CUDA, MPI, POSIX Compliance
+//	26-sep-2017 (em) Full protocol support, minimization, and more
+//	02-aug-2017 (em) created
+//
+// COPYRIGHT (C) 2017-2020 CHEMICAL COMPUTING GROUP ULC ("CCG").
+// ALL RIGHTS RESERVED.
+//
+// PERMISSION TO USE, COPY, MODIFY AND DISTRIBUTE THIS SOFTWARE IS HEREBY
+// GRANTED PROVIDED THAT: (1) UNMODIFIED OR FUNCTIONALLY EQUIVALENT SOFTWARE
+// DERIVED FROM THIS SOFTWARE MUST CONTAIN THIS NOTICE; (2) ALL CODE DERIVED
+// FROM THIS SOFTWARE MUST ACKNOWLEDGE THE AUTHOR(S) AND INSTITUTION(S); (3)
+// THE NAMES OF THE AUTHOR(S) AND INSTITUTION(S) NOT BE USED IN ADVERTISING
+// OR PUBLICITY PERTAINING TO THIS SOFTWARE WITHOUT SPECIFIC WRITTEN PRIOR
+// PERMISSION; (4) ALL CODE DERIVED FROM THIS SOFTWARE BE EXECUTED WITH THE
+// MOLECULAR OPERATING ENVIRONMENT LICENSED FROM CCG.
+//
+// CCG DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
+// ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, AND IN NO EVENT
+// SHALL CCG BE LIABLE FOR ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR
+// ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER
+// IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
+// OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+//
+// WARNING! The r=* tethers will always apply to the original .a.0
+// coordinates since amber cannot automatically apply tethers current
+// starting coordinates.  This means that r=* is only really useful at
+// the start of a simulation.  For TI the [b0]000 final coords are copied
+// to the .z.refc for the lamba windows effectively moving any tethers.
+//
+// AMBER TO DO
+//	- move resAngleForce etc. to mdutil.svl (and optimize for uniqu vals)
+//
+// AMBER_TI TO DO:
+//	- handle existing solvent properly
+//	- fill in missing data with mean on read
+
+#set title	'AMBER Molecular Dynamics'
+#set class	'MOE:simulation'
+#set version	'2020.10'
+
+function _Atoms, Solvate, PartialCharge, MM, gr_export;
+function md_BoltzmannVelocity;
+function md_ParseProtocol, md_FormatProtocol, md_ProtocolTemperature;
+function md_FileTimeStamp, md_TrajectoryFiles;
+function DepictionCoordinates;
+function QuaSAR_acalc_EHT;
+function dock_score_GBVIWSA_dG;
+function amber_WriteCOORD, amber_WritePRMTOP, amber_ExtractMolecularSystem;
+function hpc_Script, hpc_EmitScript;
+
+#if 0
+// minspanningtree calculates a minimum spanning tree on an edge-weighted graph
+// Return the mask of selected edges.
+
+local function minspanningtree [xA, xB, w]
+    local i;
+    local emask = rep [0, l_length [xA,xB,w]];		// selected edge
+    local tcode = igen max [0, max xA, max xB];		// tree node class
+    local t_idx = x_id tcode;				// tree node sets
+
+    for i in x_sort w loop
+	local I = xA(i), J = xB(i);
+
+	if     tcode(I) == tcode(J) then continue;
+	elseif tcode(I)  < tcode(J) then [I,J] = tcode[[I,J]];
+	else				 [J,I] = tcode[[I,J]];
+	endif
+
+	emask(i) = 1;
+	tcode[t_idx(J)] = I;
+	t_idx(I) = cat [t_idx(I),t_idx(J)];
+	t_idx(J) = [];
+    endloop
+
+    return emask;
+endfunction
+#endif
+
+// fcompress compresses a file in place
+
+local function fcompress src_filename
+    local src = fopenrz src_filename;
+    local dst_filename = fnametemp src_filename;
+    local dst = fopenwz dst_filename;
+    local data;
+    while length (data = freadb [src, 'char', 64*1024]) loop
+	fwriteb [dst, 'char', data];
+    endloop
+    fclose src;
+    fclose dst;
+    freplace [dst_filename, src_filename];
+endfunction
+
+// sh_LongString outputs a long string for a sh script
+
+local function sh_LongString str
+    if length str < 50 then return cat ["'", str, "'"]; endif
+    str = utf8_split [str, 70];
+    str = cat apt cat [["'"], str, ["'\\\n"]];
+    return cat ["$(echo \\\n",str,")"];
+endfunction
+
+// Ranges takes a collection of indices and returns a [lo,hi] laminated
+// vector of ranges lo-hi; singletons are [lo,lo].
+
+local function Ranges idx		// return [lo,hi] laminated
+    idx = sortuniq idx;
+
+    if     length idx == 0 then return [[],[]];
+    elseif length idx == 1 then return [idx,idx];
+    elseif length idx == 2 then
+	if inc idx(1) == idx(2) then return idx;
+	else			     return [idx,idx];
+	endif
+    endif
+
+    local mask = (inc idx == rotl idx) and (dec idx == rotr idx);
+    mask = not (mask or rotrpoke [mask, 0]);
+    idx = split [idx, mtoc mask];
+    return [app first idx, app last idx];
+endfunction
+
+// AtomMask takes a set of indices and returns an efficient (short)
+// amber input mask string.  
+
+local function AtomMask [a_mask, a_name, rseg]
+    if not orE a_mask then return ""; endif
+    if andE a_mask then return "@*"; endif
+
+	// Take a vector of integers and return ranges a-b,c,d-e etc.
+
+    function vec_str vec
+	local t = Ranges vec;
+	t = select [totok t(1), tok_cat [totok t(1),'-',totok t(2)], eqE t];
+	return swrite ['{t:|,}', t];
+    endfunction
+
+	// Return an index string of atoms or residues try mask or
+	// complement and take shortest.  Return a "not"able string;
+	// e.g., if a|b then return (a|b)
+
+    function _index_str mask
+	local rmask, str = "";
+	if orE (rmask = s_add [notnot mask, rseg] == rseg) then
+	    if andE rmask then return ":*"; endif
+	    str = cat [":", vec_str x_pack rmask];
+	    mask = mask and stretch [not rmask, rseg];
+	    if not orE mask then return str; endif
+	    str = cat ["(", str, "|@", vec_str x_pack mask,")"];
+	else
+	    str = cat ["@", vec_str x_pack mask];
+	endif
+	return str;
+    endfunction
+
+    function index_str mask			// mask vs. !complement
+	if not orE mask then return ""  ; endif
+	if andE mask    then return "@*"; endif
+	local m1 = _index_str mask;
+	local m2 = cat ["!", _index_str not mask];
+	if length m1 < length m2 then return m1; endif
+	return m2;
+    endfunction
+
+	// Namelist takes a list of names and the universe of names
+	// and compresses the list using wildcards on the prefix
+	// NOTE! Be care full not to use prefixes with special characters.
+
+    function namelist [namelist, no_match]
+	local patlist = [];			// pattern list (output)
+	namelist = uniq namelist;		// names in the set
+
+	no_match = apt tok_keep [[uniq no_match], igen 3];
+
+	while length namelist loop
+	    local n, name = first namelist;
+	    namelist = dropfirst namelist;
+
+	    for n = 1, length no_match loop
+		local p = tok_keep [name(1), n];
+		if not indexof [p, no_match(n)] then
+		    patlist = append [patlist, tok_cat [p,'=']];
+		    namelist = namelist | p <> tok_keep [namelist, n];
+		    name = '';
+		    break;
+		endif
+	    endloop
+
+	    if name <> '' then patlist = append [patlist, name]; endif
+	endloop
+
+	return sort patlist;
+    endfunction
+
+	// Create the mask string on the basic set (and complement)
+
+    local m1 = index_str a_mask;
+
+	// get the unique atom names outside the set (that don't
+	// start with digits or have special characters) and add
+	// them to the set and remove afterwards with a name pattern
+
+    local o_name = diff [uniq (a_name | not a_mask), uniq (a_name | a_mask)];
+    o_name = o_name | m_findmatch ['[A-Za-z]*', o_name];
+    o_name = o_name | not m_findmatch ['*[@:,&|!()=]*', o_name];
+
+    if length o_name then
+	local mask = a_mask or indexof [a_name, o_name];
+	o_name = namelist [o_name, a_name | a_mask];
+	o_name = swrite ['!@{|,}', o_name];
+
+	local m2 = o_name;			// assume andE mask
+	if not andE mask then
+	    m2 = cat [index_str mask, "&", o_name];
+	endif
+	if length m2 < length m1 then m1 = m2; endif
+    endif
+
+    return m1;
+endfunction
+
+// -------------------------- RESTRAINT CONVERSION ---------------------------
+
+// MOE uses a piecewise polynomial (flat, quintic, linear) for restraints.
+// NAMD uses (mostly) quadratic functional forms so we need to convert the
+// MOE force constants to NAMD force constants.  We do this by preserving
+// the variance or the free energy of the isolated restraint.
+
+// rpoly evaluates the MOE tether and restraint function which is defined
+// to be 0 for (-inf,0], a quintic polynomial for (0,1) and x for [1,inf)
+
+local function rpoly r				// r can be vectorized
+    local p = maxE [0, r];			// [1,Inf) is linear
+    local idx = x_pack ltE [0, r, 1];		// in the region (0,1)
+    r = r[idx];					// concentrate on subset
+    local r2 = sqr r, r3 = r * r2;
+    return put [p, idx, r3 * (6 - 8*r + 3*r2)];
+endfunction
+
+// resAngleForce converts MOEs flat-bottom radian-angle restraint to a
+// flat-bottom quadratic restraint.  A restraint has zero energy on a
+// given interval [L,U].  Outside this interval forces are applied.  We
+// convert this to q quadratic form by removing the [L,U] interval and
+// fitting a quadratic force constant such that the variance in the
+// restrained angle is preserved.  Use the relation <a2> = (3kT) / (2K).
+
+local function resAngleForce [L, U, K]
+    local i;
+
+	// Grid the MOE angle restraint function from [0,PI] using K=1
+
+    local psys  = SystemPush [];
+    local chain = oCreate 0, res = oCreate chain;
+    local atoms = oCreate rep[res,3];
+    local pos = tr [[1,0,0],[0,0,0],[1,0,0]];
+
+    aSetElement [atoms, 'LP'];
+    aSetInert [atoms, 1];
+
+    local key = RestraintCreate ['angle', [atoms], [[0,0]], 1.0];
+
+    const kT = KBOLTZ * 300;
+    const SETUP = [ resEnable:1 ];
+
+    local ang = (PI/180) * dec igen inc 180;	// 0..PI in 1 degree steps
+    local F   = zero ang;
+
+    for i = 1, length ang loop
+	F(i) = first Potential [
+	    X	  : apt poke [pos, 1, [cos ang(i), sin ang(i), 0]],
+	    setup : SETUP
+	];
+    endloop
+
+    RestraintDestroy key;
+    SystemPop psys;
+
+	// Calculate a conversion to a harmonic restraint centered
+	// by assuming that violations are symmetic [-PI,PI] about 0.
+	// Use the relation <r2> = (3kT) / (2K)
+
+    K = select [maxE [K, 0], 0, L<U];		// zero empty intervals
+
+    for i in x_pack (K > 0) loop
+	local pboltz = exp (- inv kT * K(i) * (F - min F));
+	local var_a = 4 * add (sqr ang * pboltz) * invz add pboltz;
+	K(i) = (3 * kT) / (2 * var_a);
+    endloop
+
+    return K;
+endfunction
+
+// resDihedralForce converts MOEs flat-bottom radian-angle restraint to NAMDs
+// flat-bottom quadratic restraint.
+
+local function resDihedralForce [L, U, K]	// [L,U] in radians
+    local i;
+
+	// Grid the MOE dihedral function from [0,PI] using K=1
+
+    local psys  = SystemPush [];
+    local chain = oCreate 0, res = oCreate chain;
+    local atoms = oCreate rep[res,4];
+    local pos = tr [[1,1,0],[1,0,0],[-1,0,0],[-1,1,0]];
+
+    aSetElement [atoms, 'LP'];
+    aSetInert [atoms, 1];
+
+    local ang = (PI/180) * dec igen inc 180;	// 0..PI in 1 degree steps
+    local F   = zero ang;
+
+    const SETUP = [ resEnable:1 ];
+    const kT = KBOLTZ * 300;
+
+    local key = RestraintCreate ['dihedral', [atoms], [[0,0]], 1.0];
+
+    for i = 1, length ang loop
+	F(i) = first Potential [
+	    X	  : apt poke [pos, 1, [1, cos ang(i), sin abs ang(i)]],
+	    setup : SETUP
+	];
+    endloop
+
+    RestraintDestroy key;
+    SystemPop psys;
+
+	// Calculate a conversion to a harmonic restraint centered
+	// by assuming that violations are symmetic [-PI,PI] about 0.
+	// Use the relation <r2> = (3kT) / (2K)
+
+    K = select [maxE [K, 0], 0, L<U];		// zero empty intervals
+
+    for i in x_pack (K > 0) loop
+	local pboltz = exp (- inv kT * K(i) * (F - min F));
+	local var_a = 4 * add (sqr ang * pboltz) * invz add pboltz;
+	K(i) = (3 * kT) / (2 * var_a);
+    endloop
+
+    return K;
+endfunction
+
+// resDistanceForce converts MOE distance restraints to harmonic form.
+// We preserve the <r2> in the violation region; that is, after remving
+// the flat bottom part.  Preserve <r2> using <r2> = (3kT) / (2K).
+
+local function resDistanceForce K
+    const kT = 300 * KBOLTZ;
+
+	// Integral evaluates an integral of the form
+	//	 int_{0,inf} r**m exp {-F(x)/kT}
+	// where F(x) is the tether function with parametres {K,0,0}
+
+    const N = 128, h = inv N, x = h * dec igen inc N;
+
+    function Integral [m, K]
+	local I1 = (
+	       exp (loggamma (m+1) - (m+1) * (K/kT))
+	     * igammaq [m+1, K/kT]
+	);
+	local I0 = h * add ( pow [x, m] * exp (-K/kT * rpoly x) );
+	return I0 + I1;
+    endfunction
+
+	// Convert the force constants
+
+    K = maxE [K, 0];
+    local i;
+
+    for i in x_pack (K > 0) loop
+	local r2 = Integral [4,K(i)] / Integral [2,K(i)];
+	K(i) = select [ (3*kT) / (2*r2), REAL_MAX, r2 > 0 ];
+    endloop
+
+    return K;
+endfunction
+
+// fwrite_DISANG writes the DISANG= file containing all of the restraints.
+// The format is repeated
+//
+//	&rst
+//	[restraint line]
+//	&end
+
+local function fwrite_DISANG fname
+    local fnum = fopenw fname;
+    local nrest = 0, rest;
+
+    for rest in tr Restraints [] loop
+	local [key, type, akeys, [r2,r3], w] = rest;
+	local r1, r4;
+
+	if type == 'distance' then
+	    w = roundf resDistanceForce w;
+	    [r1, r4] = [r2 - 2, r3 + 2];
+	elseif type == 'angle' then
+	    w = roundf resAngleForce [r2, r3, w];
+	    [r2, r3] = [r2, r3] * 180/PI;
+	    [r1, r4] = [r2 - 30, r3 + 30];
+	elseif type == 'dihedral' then
+	    w = roundf resDihedralForce [r2, r3, w];
+	    [r2, r3] = [r2, r3] * 180/PI;
+	    [r1, r4] = [r2 - 30, r3 + 30];
+	else
+	    continue;
+	endif
+
+	fwriteb [fnum, 'lineLF', swrite [
+	    '&rst\n'
+	    'iat={n:|,}, r1={}, r2={}, r3={}, r4={}, rk2={}, rk3={},\n'
+	    '&end'
+	,   aNumber akeys
+	,   r1, r2, r3, r4
+	,   w, w
+	]];
+	nrest = inc nrest;
+    endloop
+
+    fclose fnum;
+    return nrest;
+endfunction
+
+// QuadraticTether calculates the quadratic tether constant for atom tethers.
+// We use the fact that <r**2> = (3kT/2) / K a quadratic tether so we convert
+// by estimating <r**2> for the MOE tether at 300K.  Fixed atoms are given
+// a large force constant.  Return the positions and force constants.
+
+local function QuadraticTether atoms
+    local C = select [REAL_MAX, 0, aFixed atoms];	// force constant
+    local tpos = aPos atoms;				// tether position
+    const kT = 300 * KBOLTZ;
+
+	// Integral evaluates an integral of the form
+	//	 int_{0,inf} r**m exp {-F(x)/kT}
+	// where F(x) is the tether function with parametres {K,L,U}
+
+    function Integral [m, K, L, U]
+	local I_Up1 = (
+	       exp (loggamma (m+1) + K*U/kT - (m+1) * (K/kT))
+	     * igammaq [m+1, K/kT * (U+1)]
+	);
+	const N = 512;
+	local x = (U+1) * inv N * dec igen inc N;
+	local h = x(2) - x(1);
+	local I_0Up1 = h * add (
+	    pow [x, m] * exp (-K/kT * (rpoly(L-x) + rpoly(x-U)))
+	);
+	return I_0Up1 + I_Up1;
+    endfunction
+
+	// Run through the unfixed tethered atoms
+
+    local i;
+
+    for i in x_pack (not aFixed atoms and second aTether atoms > 0) loop
+	local t = aTether atoms(i);
+	local r2 = Integral [4,t(2),t(3),t(4)] / Integral [2,t(2),t(3),t(4)];
+	if r2 > 0 then
+	    C(i) = (3*kT/2) / r2;
+	    tpos(1)(i) = t(1)(1);
+	    tpos(2)(i) = t(1)(2);
+	    tpos(3)(i) = t(1)(3);
+	endif
+    endloop
+
+    return [tpos, C];
+endfunction
+
+// fwrite_TGROUP writes the tether / fixed groups that normally get included
+// into the pmemd input deck.  We write out separate groups so that a) each
+// group has the same force constant; and b) each group has either equal
+// r= mask values (so that they can be changed during the run); and c) r=
+// tethers do *not* apply to already fixed / tethered atoms.
+// We try to write efficient atom and residue ranges. Return the ref coords.
+// Parameters: the file name, *all* atoms and their names]
+
+local function fwrite_TGROUP [filename, rmask]
+    local atoms = Atoms[], res = Residues[], a_res = aResidue atoms;
+
+    local [tpos, tforce] = QuadraticTether atoms;
+    local i;
+
+    const FIXCONSTRAINT = 100.0;		// large values crash pmemd
+    tforce = roundf minE [FIXCONSTRAINT,tforce];
+
+    local ret_rmask = rmask and tforce <= 0;
+
+	// Format the resulting rmask into and amber restraintmask
+
+    local [idx,mask] = sam l_frank [notnot rmask, tforce];
+
+    rmask = ret_rmask[idx] | mask;		// restraint category
+    tforce = tforce[idx] | mask;		// constant per group
+    local gidx = split [idx, mtoc mask];	// individual groups
+
+	// Write [title][weight][ranges][END][END]
+
+    local fnum = fopenw filename;
+
+    for i = 1, l_length [gidx,tforce,rmask] loop
+	if tforce(i) == 0 and not rmask(i) then continue; endif
+	if rmask(i) then continue; endif
+
+	[idx,mask] = sam a_res[gidx(i)];	// classify by residue
+	idx = split [gidx(i)[idx], mtoc mask];
+
+	mask = rAtomCount a_res[app first idx] == app length idx;
+
+	local a_idx = Ranges cat (idx | not mask);
+	local r_idx = a_res[app first (idx | mask)];
+	if length r_idx then r_idx = indexof [r_idx, res]; endif
+	r_idx = Ranges r_idx;
+
+	fwriteb [fnum, 'char', swrite [
+	    '{}{}\n{}\n', select ['r_','t_',rmask(i)], i, tforce(i)
+	]];
+	fwriteb [fnum, 'char', cat apt swrite [
+	    '{} {} {}\n'
+	,   stretch [ ['RES','ATOM'], app l_length [r_idx,a_idx] ]
+	,   cat [r_idx(1), a_idx(1)]
+	,   cat [r_idx(2), a_idx(2)]
+	]];
+	fwriteb [fnum, 'char', "END\n"];
+    endloop
+
+    fwriteb [fnum, 'char', "END\n"];
+    fclose fnum;
+
+    return [tpos, ret_rmask];
+endfunction
+
+// -------------------------- SYSTEM EXTRACTION ------------------------------
+
+// Write is a wrapper around fwrite to output a text file in a platform
+// independent manner.  <cr> will not be added.  Arguments to Write are
+// identical to fwrite.
+
+local function _Write arg
+    local fnum = first arg;
+    local str = swrite dropfirst arg;
+    fwriteb [fnum, 'char', str];
+endfunction
+
+// amber_DynamicsOptions process the AMBER_Initialize options and ensures
+// reasonable values.
+
+local function amber_DynamicsOptions opt
+    const BONDCONSTRAINTS = ['none', 'light', 'all'];
+
+    opt = taguniq tagcat [opt, [
+	startTime	: 0,		// simulation start time (ps)
+	constraintTol	: 1e-5,		// constraint tolerance
+	checkpointTime	: 5000,		// restart checkpoint frequency (ps)
+	sample		: 10,		// sampling frequency (ps)
+	sample_pr	: -1,		// -1 = same as sample
+	bondConstraints	: second BONDCONSTRAINTS,// { 'none', 'light', 'all' }
+	rigidWater	: 1,		// rigid water?
+	saveVelocity	: 0,		// save velocity trajectory?
+	dt		: 0,		// time step (ps)
+	deleteFiles	: 0,		// delete existing files?
+	hpc		: [],		// hpc scriptig options
+	ti_parent	: '',		// derive ti files from here
+	verbose		: 1
+    ]];
+
+    opt.verbose = istrue opt.verbose;
+    opt.deleteFiles = istrue opt.deleteFiles;
+    opt.bondConstraints = token opt.bondConstraints;
+    opt.startTime = max [0, int opt.startTime];
+    opt.checkpointTime = max [0, int opt.checkpointTime];
+    opt.rigidWater = istrue opt.rigidWater;
+    opt.saveVelocity = istrue opt.saveVelocity;
+    opt.wrapAll = istrue opt.wrapAll;
+    opt.PME = istrue opt.PME;
+    opt.constraintTol = max [1e-14, opt.constraintTol];
+
+    if andE (opt.bondConstraints <> BONDCONSTRAINTS) then
+	opt.bondConstraints = first BONDCONSTRAINTS;
+    endif
+    if opt.dt <= 0 then
+	opt.dt = select [0.002, 0.001, opt.bondConstraints <> 'none'];
+    else
+	opt.dt = max [0.00001, opt.dt];
+    endif
+    opt.dt = roundf opt.dt;
+
+	// Determine the sampling and stats printing frequency. Ensure
+	// that the stats printing frequency divides the sample frequency
+	// by picking the closest divisor to the given sample_pr
+
+    opt.sample = max [1, int opt.sample];	// coord sampling
+    if opt.sample_pr < 0 then			// stats sampling
+	opt.sample_pr = opt.sample;		// same as opt.sample
+    endif
+
+    local sample_pr = 1, pr_diff = abs (opt.sample_pr - 1);
+    local i;
+
+    for i = 2, opt.sample loop
+	if not mod [opt.sample, i] then
+	    local dp = abs (i - opt.sample_pr);
+	    if dp < pr_diff then pr_diff = dp; sample_pr = i; endif
+	endif
+    endloop
+
+    opt.sample_pr = sample_pr;
+
+    return opt;
+endfunction
+
+// WriteProtocolScript writes out a protocol script file that runs amber.
+// WARNING! WE ASSUME THAT THE OPTIONS ARE ALL VALID AND PRESENT.
+
+local function WriteProtocolScript [filename, fbase, protocol, opt]
+    local template = imoe_MustFind '$MOE/lib/sh/amber_md.sh';
+    local dict = [];
+
+    dict.pbc = swrite [ 'PBC="{}"\n', istrue opt.pbc ];
+    dict.T0  = swrite [ 'T0={}\n', opt.T0 ];
+    dict.restraintmask  = swrite [ 'restraintmask="{}"\n', opt.restraintmask ];
+
+	// Generate the header of the script and a signature for
+	// automatically generated files
+
+    dict.header = swrite [
+	'#!/bin/sh\n'
+	'#Automatically generated on {}\n'
+	'#Generated by MOE {n:.2f} (Chemical Computing Group)\n'
+    ,	asctime []
+    ,	MOE_VERSION
+    ];
+    dict.moever = swrite ['MOEVER={n:.2f}', MOE_VERSION ];
+
+    dict.z_files = swrite [
+	'z_base="{}"\n'
+	'z_disang="{}"\n'
+	'z_group="{}"\n'
+	'z_prmtop="{}"\n'
+	'z_protocol="{}"\n'
+	'z_prot_seg="{}"\n'
+	'z_prot_sh="{}"\n'
+	'z_refc="{}"\n'
+    ,	fbase
+    ,	tok_cat [fbase, '.z.disang'	]
+    ,	tok_cat [fbase, '.z.group'	]
+    ,	tok_cat [fbase, '.z.prmtop'	]
+    ,	tok_cat [fbase, '.z.protocol'	]
+    ,	tok_cat [fbase, '.z.prot_sh'	]
+    ,	tok_cat [fbase, '.z.refc'	]
+    ];
+
+	// Set up the thermodynamic integration items
+
+    local ti = opt.opt_ti;
+
+    if length ti then
+	if     not leE [0, ti.lambda, 1]
+	    or not add app length [ti.atoms1,ti.atoms2]
+	then
+	    ti = [];
+	endif
+    endif
+
+    if not length ti then
+	dict.icfe = 'icfe=0\nicfe_cntrl=""\n';
+    else
+	dict.icfe = swrite [
+#	    token
+	    icfe=1
+	    icfe_cntrl=$(cat <<"EOT"
+	     icfe=1, ifsc={}, scalpha={}, scbeta={}, clambda={}, ntmin=2,
+	     timask1='{}',
+	     timask2='{}',
+	     scmask1='{}',
+	     scmask2='{}',{}{}
+	    EOT
+	    )
+#	,   istrue length cat [ti.scmask1,ti.scmask2]
+	,   select [ 0.2,  0.0, ti.softcore]		// optimal
+	,   select [50.0 , 0.0, ti.softcore]		// amber20 default
+	,   ti.lambda
+	,   ti.atoms1
+	,   ti.atoms2
+	,   ti.scmask1
+	,   ti.scmask2
+	,   select [
+		twrite ['\n noshakemask={}, ', ti.noshakemask]
+	    ,	''
+	    ,	length ti.noshakemask
+	    ]
+	,   select ['', '\n jfastw=4, ', ti.fastwater]
+	];
+    endif
+
+	// Generate the main options
+
+    dict.opt = swrite [
+	'opt_sample={-12}       # frame output frequency (ps)\n'
+	'opt_sample_pr={-12}    # frame stdout printing frequency (ps)\n'
+	'opt_dt={-12}           # time step (ps)\n'
+	'opt_shake={-12}        # rigid bond constraints {{none|light|all}\n'
+	'opt_rigidWater={-12}   # rigid water molecules\n'
+	'opt_shake_tol={-12}    # constraint tolerance\n'
+	'opt_wrapAll={-12}      # wrap coordinates to box on output\n'
+	'opt_saveVelocity={-12} # save velocities to trajectory\n'
+	'opt_t_start={-12}      # start time of protocol (ps)\n'
+	'opt_t_checkpoint={-12} # checkpoint time (ps)\n'
+	'opt_cutoff={-12}       # nonbonded cutoff (A)\n'
+	'opt_disang={-12}       # enable DISANG restraints file\n'
+    ,	opt.sample
+    ,	opt.sample_pr
+    ,	opt.dt
+    ,	opt.bondConstraints
+    ,	istrue opt.rigidWater and istrue opt.pbc
+    ,	maxE [1e-10, opt.constraintTol]
+    ,	istrue opt.wrapAll
+    ,	istrue opt.saveVelocity
+    ,	maxE [0, int opt.startTime]
+    ,	maxE [1, int opt.checkpointTime]
+    ,	maxE [1, minE [9999, opt.cutoff]]
+    ,	1
+    ];
+
+    hpc_EmitScript [template, filename, dict];
+endfunction
+
+local function ParseProtocol protocol
+    local prot = md_ParseProtocol protocol;
+    local i;
+
+    for i = 1, length prot loop
+	const STD_MD = [ 'ps', 'T', 'P', 'QT', 'QP', 'r', 'name' ];
+	prot(i) = prot(i) | indexof [tags prot(i), STD_MD];
+	if neE prot(i).P then
+	    exit 'AMBER does not support varying pressure';
+	endif
+	if neE prot(i).r then
+	    exit 'AMBER does not support varying r= tethers.';
+	endif
+    endloop
+
+    return prot;
+endfunction
+
+// AMBER_Extend extends a simulation.  We accept either the simulation
+// directory, protocol file or filebase as per Initialize.
+
+local function AMBER_Extend [root, protocol, opt]
+
+	// locate the base simulation path/prefix
+
+    if ftype root == 'dir' then
+	root = flist [root, '*.z.protocol'];
+	if not length root then exit 'Can\'t find .z.protocol file'; endif
+	if length root <> 1 then exit 'No unique .z.protocol file'; endif
+	root = tok_drop [root, - tok_length '.z.protocol'];
+    elseif ftype root == 'file' then
+	if not m_findmatch ['*.z.protocol', root] then
+	    exit 'Specified file must by a .z.protocol file';
+	endif
+	root = tok_drop [root, - tok_length '.z.protocol'];
+    elseif ftype tok_cat [root, '.z.protocol'] <> 'file' then
+	exit 'Can\'t locate .z.protocol file';
+    endif
+
+	// Parse the protocol to verify
+
+    local prot = ParseProtocol protocol;
+    if not length prot then return; endif
+
+    local pfile = tok_cat [root,'.z.protocol'];
+    local data = freadb [pfile, 'char', INT_MAX];
+    if length data and not (last data === "\n") then
+	data = append [data, "\n"];
+    endif
+    data = cat [data , md_FormatProtocol prot];
+    fwriteb [pfile, 'char', data];
+
+	// print data
+
+    if istrue opt.verbose then
+	write ['{}:\n', pfile];
+	fwriteb [CLI, 'char', data];
+    endif
+endfunction
+
+// AMBER_Initialize creates the required files (for the current system)
+// suitable for AMBER along with automation scripts.  Upon an option
+// we will clear out all existing trajectory files.  Return the name
+// of a script file that can be used to launch namd on the current machine.
+
+global function AMBER_Initialize [filebase, protocol, opt]
+    local i;
+
+    if istrue opt.extend then
+	AMBER_Extend [filebase, protocol];
+	return;
+    endif
+
+    if tolower fext filebase == '.mdb' then
+	filebase = fbase filebase;
+    endif
+
+	// Preprocess the options (adding defaults and normalizing
+	// some values) and write out our launch command.
+
+    opt = amber_DynamicsOptions opt;
+
+    if opt.verbose then
+	local pstr = sreadb [md_FormatProtocol protocol, 'line', INT_MAX];
+	if not length pstr then pstr = ["# empty protocol"]; endif
+
+	write ['AMBER_Initialize [\n'];
+	write ['    \'{}\',\n', filebase];
+	write ['#   string\n'];
+	apt write ['    {}\n', pstr];
+	write ['# , [\n'];
+	write ['        startTime       : {}\n'    , opt.startTime	];
+	write ['    ,   sample          : {}\n'    , opt.sample		];
+	write ['    ,   sample_pr       : {}\n'    , opt.sample_pr	];
+	write ['    ,   bondConstraints : {v}\n'   , opt.bondConstraints];
+	write ['    ,   constraintTol   : {v}\n'   , opt.constraintTol	];
+	write ['    ,   rigidWater      : {}\n'    , opt.rigidWater	];
+	write ['    ,   dt              : {}\n'    , opt.dt		];
+	write ['    ,   wrapAll         : {}\n'    , opt.wrapAll	];
+	write ['    ,   saveVelocity    : {}\n'    , opt.saveVelocity	];
+	write ['    ,   checkpointTime  : {}\n'    , opt.checkpointTime	];
+	write ['    ,   deleteFiles     : {}\n'    , opt.deleteFiles	];
+	write ['    ,   ti_parent       : {}\n'    , opt.ti_parent	];
+	write ['    ,   opt_hpc         : {v}\n'   , opt.hpc		];
+	write ['    ,   verbose         : {}\n'    , opt.verbose	];
+	write ['    ]\n'];
+	write ['] ;\n'];
+	write ['AMBER_Initialize {n:.2f} started {}\n',
+	    (modenv[]).version, asctime[]
+	];
+    endif
+
+    function vwrite arg
+	if opt.verbose then write arg; endif
+    endfunction
+
+    local time = clock[];
+    local ti_parent = token opt.ti_parent;
+
+	// Veryify AMBER support and set additional options
+
+    local prot = ParseProtocol protocol;
+    local cell = [ '', [0,0,0], [0,0,0]];
+    opt.pbc = CellEnable[];
+
+    if opt.pbc then
+	cell = CellParameters[];
+	if SPACEGROUP_SYMMETRYCOUNT(indexof [cell(1), SPACEGROUP_NAME]) then
+	    exit 'Spacegroup symmetry operators not supported.';
+	endif
+    endif
+
+	// Use fixed 8A cutoff for PME/PBC... Otherwise use specified
+	// cutoff at the off boundary per NAMD
+
+    local setup = pot_Setup [];
+
+    if opt.pbc then
+	opt.cutoff = 8.0;		// PME suggested value
+    elseif setup.cutoffEnable then
+	opt.cutoff = setup.cutoffOff;	// non-periodic
+    else
+	opt.cutoff = 9999.0;		// AMBER infinite cutoff
+    endif
+
+	// If permitted, delete any existing trajectory files associated
+	// with this file base.
+
+    if opt.deleteFiles then
+	local [tfile, tstamp] = md_TrajectoryFiles filebase;
+	local ndel = add not _fdelete tfile;
+	vwrite ['deleted existing files : {n:.0f}\n', ndel ];
+    endif
+
+	// Extract the parameter information for the system as well as
+	// the position and periodicity settings.
+
+    local msys = amber_ExtractMolecularSystem [opt.rigidWater];
+
+    local a_tcode   = md_FileTimeStamp opt.startTime;
+    local a_coord   = tok_cat [filebase, a_tcode, '.coor' ];
+    local a_moe	    = tok_cat [filebase, a_tcode, '.moe'  ];
+    local a_valid   = tok_cat [filebase, a_tcode, '.valid'];
+
+    local z_prmtop  = tok_cat [filebase, '.z.prmtop'	  ];
+    local z_refc    = tok_cat [filebase, '.z.refc'	  ];
+    local z_disang  = tok_cat [filebase, '.z.disang'	  ];
+    local z_group   = tok_cat [filebase, '.z.group'	  ];
+    local z_prot    = tok_cat [filebase, '.z.protocol'	  ];
+    local z_prot_sh = tok_cat [filebase, '.z.prot_sh'	  ];
+    local z_sh	    = tok_cat [filebase, '.z.sh'	  ];
+
+	// Write out the initial coordinates as well as the
+	// topology and forcefield parameter files
+	// Skip these if ti_parent - the scripts will use [bu]000/*
+
+    opt.T0 = md_ProtocolTemperature protocol;
+    vwrite ['starting temperature   : {n:.6g}\n', opt.T0];
+
+    if ti_parent == '' then
+	local vel = md_BoltzmannVelocity [
+	    msys.a_pos
+	,   select [0, invz msys.a_mass, msys.a_fixed or msys.a_inert]
+	,   KBOLTZ * opt.T0
+	,   [ lmom: 0, amom: 0, scale : 1]
+	];
+
+	amber_WriteCOORD [a_coord, msys.a_pos, vel, msys.cell, [
+	    title: '# initial coordinates, velocities and cell'
+	,   time : opt.startTime
+	,   T    : opt.T0
+	]];
+	WriteMOE a_moe;
+	fcompress a_moe;
+
+	vwrite ['starting coordinates   : {n:.6g}\n', ftail a_coord];
+	vwrite ['starting moe file      : {n:.6g}\n', ftail a_moe];
+    else
+	vwrite ['starting coordinates   : {}\n', '*omitted*'];
+	vwrite ['starting moe file      : {n:.6g}\n', '*omitted'];
+    endif
+
+	// Write the prmtop, tether coordinates and tether groups; write
+	// the restraints to the z_disang file.
+	// Write the tether groups to a seprate file for inclusion in the
+	// pmemd input file.
+	// WARNING! r= RESTRAINTS ONLY APPLY TO THE ORIGINAL COORDINATES
+
+    if ti_parent == '' then
+	amber_WritePRMTOP [z_prmtop, msys];
+	fwrite_DISANG z_disang;
+    else
+	fcopy [ fcat [ti_parent, ftail z_disang], z_disang ];
+    endif
+
+    local tpos, rmask = not aIsLight Atoms[];
+    [tpos,rmask] = fwrite_TGROUP [z_group, rmask];
+    opt.restraintmask = AtomMask [rmask, msys.a_name, msys.r_natoms];
+
+    if ti_parent == '' then
+	amber_WriteCOORD [z_refc, tpos, [], [], [
+	    title: '# fixed and tethered atom coordinates'
+	,   time : opt.startTime
+	]];
+    endif
+
+    if ti_parent == '' then
+	vwrite ['system topology        : {}\n', ftail z_prmtop];
+	vwrite ['restraints             : {}\n', ftail z_disang];
+	vwrite ['tether coordinates     : {}\n', ftail z_refc  ];
+	vwrite ['tether groups          : {}\n', ftail z_group ];
+    else
+	vwrite ['system topology        : {}\n', '*omitted*'   ];
+	vwrite ['restraints             : {}\n', ftail z_disang];
+	vwrite ['tether coordinates     : {}\n', '*omitted*'   ];
+	vwrite ['tether groups          : {}\n', ftail z_group ];
+    endif
+
+	// If there is Thermodynamic Integration data then convert
+	// the atom lists into masks prior to writing the protocol
+
+    if length opt.opt_ti then
+	local t;
+	for t in ['atoms1','atoms2','scmask1','scmask2','noshakemask'] loop
+	    opt.opt_ti.(t) = AtomMask [
+		put [zero msys.a_name, opt.opt_ti.(t), 1]
+	    ,	msys.a_name
+	    ,	msys.r_natoms
+	    ];
+	endloop
+    endif
+
+	// Write the shell scripts and protocol file
+
+    fwriteb [z_prot, 'char', cat app md_FormatProtocol app nest prot];
+    WriteProtocolScript [z_prot_sh, ftail filebase, protocol, opt];
+
+    local sh_num = fopenw z_sh;		// <filebase>.z.sh
+
+    local dict = [];
+    dict.header = swrite [
+	'#!/bin/sh\n'
+	'# Automatically generated on {}\n'
+	'# MOE {n:.2f} (Chemical Computing Group)\n'
+    ,   asctime []
+    ,   MOE_VERSION
+    ];
+    dict.usage = swrite [
+	'# usage: sh {} [hpc] [ -- options ] ... (-help for details)\n'
+    ,	ftail z_sh
+    ];
+
+    hpc_EmitScript [
+#	string
+	#!/bin/sh
+	#_HPC_INSERT:header
+	#_HPC_INSERT:usage
+	set -e
+#   ,	sh_num
+    ,	dict
+    ];
+
+    // !!! opt.hpc is undocumented! (meant to be opt.opt_hpc?)
+    hpc_Script [sh_num, 1, '', [[],[]], opt.hpc];	// emit <filebase>.z.sh
+    hpc_EmitScript [imoe_MustFind '$MOE/lib/sh/amber_init.sh', sh_num];
+    hpc_EmitScript [
+#	string
+
+	#_HPC_INSERT:z_prot_sh
+
+	# If task_id is 0 then the job has completed and we can add any
+	# cleanup routines.  There is only one job - the MD job
+
+	if [ "$task_id" -eq 1 ]; then
+	    (
+		export MOE_AMBER_EXE
+		export MOE_AMBER_EXE_EMIN
+		export CUDA_VISIBLE_DEVICES
+		sh "$z_prot_sh"
+	    )
+	fi
+
+	exit 0;
+
+#   ,   sh_num
+    ,	[ z_prot_sh: swrite ['z_prot_sh={}', ftail z_prot_sh] ]
+    ];
+
+    fclose sh_num;
+    _fsetpermissions [z_sh, 7];
+
+    if ti_parent == '' then
+	fclose fopenw a_valid;		// last file created
+    endif
+
+    vwrite ['protocol file          : {}\n', ftail z_prot   ];
+    vwrite ['protocol script        : {}\n', ftail z_prot_sh];
+    vwrite ['main hpc script        : {}\n', ftail z_sh	    ];
+
+    if ti_parent == '' then
+	vwrite ['create validity file   : {}\n', ftail a_valid  ];
+    else
+	vwrite ['create validity file   : {}\n', '*omitted'  ];
+    endif
+
+    vwrite ['AMBER_Initialize {n:.2f} done {}\n',
+	    (modenv[]).version, asctime[]
+    ];
+    vwrite [
+#	token
+	Run/restart : unix> sh {}
+	Import	    : svl > MD_Import [ 'dst.mdb', '{}' ]
+#   ,   fabsname z_sh
+    ,   fpath fabsname z_sh
+    ];
+
+    if call [] then return []; endif
+    return fabsname z_sh;
+endfunction
+
+// ----------------------- THERMODYNAMIC INTEGRATION (TI) ---------------------
+
+local function aLightBonds atoms
+    local nbr = aBonds atoms;
+    return nbr || aIsLight nbr;
+endfunction
+
+// MeanFieldMinimize minimize all ligands in a mean field manner with the
+// receptor (all atoms without the ligands).  Optionally, an overlap term
+// is added to the potential: a sum-of-gaussians overlap where the standard
+// deviation of each atom is the radius/2.
+//
+//	overlap(I,J) = wIJ * exp (sIJ * |xI - xJ|**2)
+
+const MEANFIELD_POTSETUP = [
+    eleDist		: 2
+,   eleDielectric	: 1
+,   solDielectric	: 80
+,   solEnable		: 0
+];
+
+const OVERLAP_RSCALE = 0.25;
+
+local function overlap_arg [lig, rscale]
+    local  weight = 5 * 2 / (length lig * dec length lig);
+
+    local idx = aNumber cat lig;			// index in system
+    local S = inv sqr (rscale * aRadius cat lig);	// sqr std. deviation
+    local id = stretch [x_id lig, app length lig];	// ligand id
+
+    local I = stretch [x_id idx, length idx];		// interaction pairs
+    local J = cat rep [x_id idx, length idx];
+    [I,J] = [I,J] || [I < J and id[I] <> id[J]];
+
+    local s = - (S[I] * S[J]) / (S[I] + S[J]);
+    return [I:idx[I], J:idx[J], S:s, w: weight ];
+endfunction
+
+local function overlap_fcn [pos, arg]
+    local I = arg.I, J = arg.J;
+    local vec = apt get [pos, [I]] - apt get [pos, [J]];
+    local r2 = add sqr vec;
+
+    local F = -2 * arg.w * exp(arg.S * r2);
+    local dF = [F * arg.S] * vec;
+
+    return [ 0.5 * add F, [
+	putadd [putadd [zero pos(1), I, dF(1)], J, -dF(1)]
+    ,	putadd [putadd [zero pos(2), I, dF(2)], J, -dF(2)]
+    ,	putadd [putadd [zero pos(3), I, dF(2)], J, -dF(3)]
+    ]];
+endfunction
+
+local function MeanFieldMinimize [lig, opt]
+    opt = tagcat [opt, [
+	dfix:	REAL_MAX
+    ,	dinert:	REAL_MAX
+    ,	gtest:	1.0
+    ,	verbose : 0
+    ]];
+
+    local rscale, prox, seg, idx;
+    local old_state = aState Atoms[];
+    local old_fixed = aFixed Atoms[];
+    local old_inert = aInert Atoms[];
+    local rec = diff [Atoms[], cat lig];
+
+    if opt.dfix < REAL_MAX then
+	prox = prox_open [opt.dfix, aPos rec, opt.dfix];
+	[seg,idx] = prox_find [prox, aPos cat lig, 0];
+	prox_close prox;
+	aSetFixed [[rec,lig], [not indexof [rec,rec[idx]], 0]];
+    endif
+    if opt.dinert < REAL_MAX then
+	prox = prox_open [opt.dinert, aPos rec, opt.dinert];
+	[seg,idx] = prox_find [prox, aPos cat lig, 0];
+	prox_close prox;
+	aSetFixed [[rec,lig], [not indexof [rec,rec[idx]], 0]];
+    endif
+
+    aSetState [[rec,lig], [0, x_id lig]];
+
+    local setup = [
+	state0		: 1
+    ,	state1		: 0
+    ,	state2		: inv length lig
+    ];
+    setup = tagcat [setup, MEANFIELD_POTSETUP];
+
+    for rscale in OVERLAP_RSCALE * [1] loop
+	MM [
+	    gtest		: max [1e-6, opt.gtest]
+	,   pot_finalize	: 0
+	,   pot_charge		: 0
+	,   rigidHOH		: 1
+	,   rigidOH		: 1
+	,   optimizeOH		: 0
+	,   careful		: 1e4
+	,   potSetup		: tagcat [setup, pot_Setup[]]
+	,   pot_fcn		: [ #overlap_fcn ]
+	,   pot_fcn_arg		: [ overlap_arg [lig, rscale] ]
+	,   verbose		: opt.verbose
+	];
+    endloop
+
+    aSetState [Atoms[], old_state];
+    aSetFixed [Atoms[], old_fixed];
+    aSetInert [Atoms[], old_inert];
+endfunction
+
+// AmberSC calculates the set of core atoms in the system based on distance
+// criteria. Determines which atoms are unique appearing/disappearing and the
+// common core.  The common core is determined by co-incidence of coordinates.
+// Set soft core potentials on appearing/disappearing.
+
+local function AmberSC [atoms0, atoms1, opt]
+    local scatoms1 = atoms0, scatoms2 = atoms1, ti_atoms = cat [atoms0,atoms1];
+    local ccatoms1 = [], ccatoms2 = [];
+
+    function ExtractCore [c1, com1, c2, com2]
+	local mask;
+
+	local nbr1 = BondGraph c1, deg1 = app length nbr1; nbr1 = cat nbr1;
+	local nbr2 = BondGraph c2, deg2 = app length nbr2; nbr2 = cat nbr2;
+
+	local cL1 = s_add [aIsLight c1[nbr1], deg1];	// core light nbrs
+	local cL2 = s_add [aIsLight c2[nbr2], deg2];
+
+	local nL1 = app add aIsLight aBonds c1;		// total light nbrs
+	local nL2 = app add aIsLight aBonds c2;
+
+	local idx = x_pack (
+		eqE aElement [c1,c2]		// same element type
+	    and eqE aGeometry [c1,c2]		// same hybridization
+	    and eqE aIsLight [c1,c2]		// same light classification
+	    and (deg1 == deg2)			// same (core) bond count
+	    and (cL1 == cL2)			// same (core) light count
+	    and not orE aIsLight [c1,c2]	// must be heavy
+	);
+
+	    // avoid core heavy -> non-core light since this will
+	    // force a 1fs timestep in AMBER
+
+	if orE (mask = nL1[idx] <= cL1[idx] and nL2[idx] <= cL2[idx]) then
+	    idx = idx | mask;
+	endif
+
+	    // avoid sp atoms as core candidates
+
+	if orE (mask = not orE (aGeometry [c1[idx],c2[idx]] == 'sp')) then
+	    idx = idx | mask;
+	endif
+
+	    // look for a small common core near the center of mass
+	    // !!! add in a-b-c angles with 0 light for {a,b,c}
+
+	local xbond = BondGraph c1[idx];
+	local [xA,xB] = graph_edges xbond;
+	local xcore1 = idx | cL1[idx] >= 2 and cL2[idx] == cL1[idx];
+
+	[xA,xB] = [xA,xB] || [
+		bOrder [c1[idx[xA]],c1[idx[xB]]]
+	    and bOrder [c2[idx[xA]],c2[idx[xB]]]
+	];
+	[xA,xB] = [xA,xB] || [
+	    0.1 > abs (						// !!! magic
+		  second pot_Parm_str [c1[idx[xA]],c1[idx[xB]]]
+		- second pot_Parm_str [c2[idx[xA]],c2[idx[xB]]]
+	    )
+	];
+
+	local xcore2 = [xA,xB] || [
+		cL1[idx[xA]] < 2
+	    and cL1[idx[xB]] < 2
+	    and cL1[idx[xA]] + cL1[idx[xB]] >= 1
+	];
+	xcore2 = split [idx[cat tr xcore2], 2];
+
+	[xA,xB] = [xA,xB] || [ not cL1[idx[xA]] and not cL1[idx[xB]] ];
+	xbond = graph_neighbors [xA, xB, length xbond];
+
+	local xcore3 = apt append [xbond, x_id xbond];
+	xcore3 = xcore3 | app length xcore3 >= 3;
+	xcore3 = split [idx[cat xcore3], app length xcore3];
+
+	idx = cat [ xcore1, xcore2, xcore3 ];
+	local seg = app length idx;
+
+	idx = idx[x_sort (
+	      norm (apt s_add [aPos c1[cat idx], [seg]] / [seg] - com1)
+	    + norm (apt s_add [aPos c2[cat idx], [seg]] / [seg] - com2)
+	)];
+	idx = first idx;
+
+	nbr1 = cat aBonds c1[idx];
+	nbr1 = nbr1 | aIsLight nbr1 and indexof [nbr1,c1];
+	nbr2 = cat aBonds c2[idx];
+	nbr2 = nbr2 | aIsLight nbr2 and indexof [nbr2,c2];
+
+//	aSetSelected [[cat[c1[idx],nbr1], cat[c2[idx],nbr2]],1];
+	return [cat[c1[idx],nbr1], cat[c2[idx],nbr2]];
+    endfunction
+
+    if opt.core >= 0 then
+	local prox = prox_open [opt.core, aPos atoms0, opt.core];
+	local [seg,nbr] = prox_find [prox, aPos atoms1, 0];
+	prox_close prox;
+	nbr = split [nbr, seg];
+
+	local core = x_pack (app length nbr == 1);
+	ccatoms1 = atoms0[nbr[core]];
+	ccatoms2 = atoms1[core];
+
+	[ccatoms1,ccatoms2] = ExtractCore [
+	    ccatoms1, oCenterOfMass atoms0
+	,   ccatoms2, oCenterOfMass atoms1
+	];
+
+	scatoms1 = diff [atoms0, ccatoms1];
+	scatoms2 = diff [atoms1, ccatoms2];
+	ti_atoms = cat [scatoms1,scatoms2,ccatoms1,ccatoms2];
+    endif
+
+    return [scatoms1, scatoms2, ccatoms1, ccatoms2, ti_atoms];
+endfunction
+
+// PrepareSystem prepares the system for a TI calculation. We are given
+// the TI atoms (lamda=0 and lamda=1).  We return the wall/cell parameters.
+// WARNING! LIGHT ATOMS MUST BE IN THE TI SET IFF THE BONDED HEAVY ATOM
+// IS IN IN THE SET.  LIGHT ATOMS WILL AUTOMATICALLY BE ADDED TO THE TI ATOMS.
+// WARNING! WE ASSUME THAT THE SYTEM IS PREPARED WITH PARTIAL CHARGES SET
+
+local function ti_PrepareSystem [leg, atoms0, atoms1, opt]
+
+	// Finalize the model and calculate ligand charges.
+	// Add back the light atoms to atoms{0,1}.
+
+    local [q0,q1] = aCharge [atoms0,atoms1];		// save charges
+    pot_FinalizeModel [];
+
+    local r_atoms = diff [Atoms [], cat [atoms0,atoms1]];
+
+    if leg == 'u' then				// unbound state?
+	oDestroy r_atoms;
+    endif
+
+    if opt.verbose then
+	write ['AMBER_TI: prepare {}bound state:\n', select ['un','',leg=='u']];
+	write ['    receptor atoms: {}\n', length r_atoms];
+    endif
+
+	// Perform a mean field minimize to overlap the ligands; then
+	// determine the common and softcore
+
+    MeanFieldMinimize [[atoms0,atoms1], [dfix: 10, dinert: 15, gtest: 1.0]];
+
+    local [scatoms1, scatoms2, ccatoms1, ccatoms2, ti_atoms] = AmberSC [
+	atoms0, atoms1, opt
+    ];
+
+	// Solvate the system.  If the ligand atoms differ in ionization
+	// then possibly include salt ions in the TI calculations
+
+    local s_opt = tagcat [opt.opt_solvate, [
+	margin	: 10.0
+    ,	solvent	: 'Water'
+    ,	salt	: 'NaCl'
+    ,	conc	: 0.1
+    ,	delete	: ''
+    ,	center	: 1
+    ,	align	: 1
+    ,	ti_atoms: [atoms0,atoms1]
+    ,	verbose	: 0
+    ]];
+    s_opt.mode = 'Periodic';
+    s_opt.shape = 'Box';
+
+    Solvate [ Atoms[], s_opt ];
+
+    pot_FinalizeModel [];
+    aSetCharge [[atoms0,atoms1],[q0,q1]];
+
+    local setup = [
+	state0: 1
+    ,	state1: 0
+    ,	state2: 0.5
+    ,	solEnable: 0
+    ];
+    aSetState [Atoms[],0];
+    aSetState [atoms0,1];
+    aSetState [atoms1,2];
+
+    local rkeys = RestraintCreate ['distance', tr [ccatoms1,ccatoms2], 0, 1e6];
+
+    if opt.verbose then
+	write ['    total charge  : {n:.3f}\n', (
+	      add aCharge diff [Atoms[], cat [atoms0,atoms1]]
+	    + 0.5 * (add aCharge atoms0 + add aCharge atoms1)
+	)];
+	write ['    core atoms    : {}\n', l_length [ccatoms1,ccatoms2]];
+    endif
+
+    MM [
+	gtest : 1000
+    ,	pot_finalize : 0
+    ,	pot_charge : 0
+    ,	rigidHOH: 1
+    ,	rigidOH : 1
+    ,	careful	: 1e4
+    ,	potSetup: setup
+    ,	verbose : 0
+    ];
+    aSetState [Atoms[],0];
+    RestraintDestroy rkeys;
+
+    return [atoms0, atoms1, scatoms1, scatoms2, ccatoms1, ccatoms2, ti_atoms];
+endfunction
+
+// The following emits a A(lambda=0)->B(lambda=1) free energy simulation
+// colleciton of scripts for AMBER TI.  The system is assumed to be
+// properly charged with all hydrogens.
+
+const AMBER_TI_DEFAULTS = [
+    T		: 300		// temperature
+,   P		: 101		// pressure (>= 0 for const P)
+,   core	: 0.1		// core prox tolerance (< 0 to disable)
+,   nlambda	: 11		// number of lambda steps
+,   ps_emin	: 10		// energy minimization duration (ps)
+,   ps_equil	: 5000		// master equilibration duration (ps)
+,   ps_equil_w	: 100		// lambda window duration (ps)
+,   ps_sample	: 5000		// master sampling duration (ps)
+,   ps_sample_p	: 10		// sampling period (ps)
+,   npt		: 1		// sample with NPT?
+,   pcharge	: 'AM1-BCC'	// partial charge model for ligands
+,   mm_gtest    : 1.0		// MOE minimize gradient test
+,   opt_solvate	: []		// additional solvation options
+,   opt_md	: []		// additional AMBER_Initialize options
+,   opt_hpc	: []		// hpc script options
+,   edge	: []		// simulation edges [I,J]
+,   verbose	: 1
+];
+
+local function _AMBER_TI_Initialize [filebase, rec, atoms0, atoms1, opt]
+    opt = tagcat [opt, AMBER_TI_DEFAULTS];
+
+    function vwrite arg
+	if not opt.verbose then return; endif
+	write arg;
+    endfunction
+
+    local i;
+
+    rec = [rec,atoms0,atoms1];
+    local [osys,nsys,keys] = SystemPush cat rec;
+    [rec,atoms0,atoms1] = split [keys, app length rec];
+
+    filebase = fabsname filebase;
+    vwrite ['AMBER_TI: create directory: {}\n', filebase];
+
+    _fdeleteR filebase;		// warning: can (silently) partially fail
+    sleep 0.1;	// protection for windows to finish delete process
+    _fmkdir filebase;		// won't fail even if the delete fails
+
+	// Create the master protocols
+
+    local P_str = select [twrite [' P={}', opt.P], '', opt.P >= 0];
+    local p_equil = "", p_step = "";
+
+    if int opt.ps_emin > 0 then
+	p_equil = cat [p_equil, swrite [
+	    'mm     {{ ps={} T=0 }\n', opt.ps_emin
+	]];
+    endif
+
+    p_equil = cat [p_equil, swrite [
+	'heat    {{ ps={} T=(50,{}) }\n'
+	'nvt     {{ ps={} T={} }\n'
+	'npt     {{ ps={} T={}{} }\n'
+    ,    max [1, round (0.1 * opt.ps_equil)], opt.T
+    ,    max [1, round (0.1 * opt.ps_equil)], opt.T
+    ,    max [1, round (0.8 * opt.ps_equil)], opt.T, P_str
+    ]];
+
+    if not opt.npt then			// disable NPT to gather dV/dL?
+	P_str = '';
+    endif
+
+    p_step = cat [p_step, swrite [
+	'nvt    {{ ps={} T={} }\n'
+	'npt    {{ ps={} T={}{} }\n'
+	'sample {{ ps={} T={}{} }\n'
+    ,    max [1, round (0.25 * opt.ps_equil_w)], opt.T
+    ,    max [1, round (0.75 * opt.ps_equil_w)], opt.T, P_str
+    ,    max [1, round (1.00 * opt.ps_sample )], opt.T, P_str
+    ]];
+
+    vwrite 'AMBER_TI: equilibration protocol:\n';
+    apt vwrite ['    {}\n', sreadb [p_equil, 'line', INT_MAX]];
+
+    vwrite 'AMBER_TI: integration protocol:\n';
+    apt vwrite ['    {}\n', sreadb [p_step, 'line', INT_MAX]];
+
+	// GetPParm collects the potential parameters.
+	// SetPParm sets the potential parameters.
+
+    local function GetPParm [] = [
+	pot_WallEnable	   : pot_WallEnable []
+    ,   pot_WallParameters : pot_WallParameters []
+    ,   CellEnable	   : CellEnable []
+    ,   CellParameters	   : CellParameters []
+    ,   _pot_Setup	   : _pot_Setup []
+    ];
+    local function SetPParm p = apt call untag p;
+
+	// Determine the coordinate sampling and statistics printing periods
+
+    local sample_p = max [1, int opt.ps_sample_p];	// coordinate saving
+
+	// Emit the unbound simulations: push the TI atoms alone,
+	// prepare the system and emit the simulation scripts.
+
+    function itok i
+	local t = totok i;
+	if i < 10 then t = tok_cat ['0', t]; endif
+	if i < 100 then t = tok_cat ['0', t]; endif
+	return t;
+    endfunction
+
+    local leg;
+    local step = cat [
+	0.5
+    ,	0.5 * (1 + cos ((igen opt.nlambda - 0.5) * PI / opt.nlambda))
+    ];
+    local step_path = rep ['', length step];
+
+    const TIP3P = [				// TIP3P water
+	1, '[#1X1D1][OX2Q0D2][#1X1D1]',
+	1, '[OX2Q0D2]([#1X1D1])[#1X1D1]',
+	0
+    ];
+
+    function noshake_atoms [A, B]		// light bonds accross ab
+	local Anbr = cat aBonds A;
+	A = stretch [A, aBondCount A];
+	[A,Anbr] = [A,Anbr] || [
+		xorE [indexof [A,B], indexof [Anbr,B]]
+	    and xorE aIsLight [A,Anbr]
+	];
+	A = cat [A,Anbr];
+	return A | aIsLight A;
+    endfunction
+
+    for leg in ['b','u'] loop
+	local t0 = clock[];
+	local _atoms0 = aNumber atoms0, _atoms1 = aNumber atoms1;
+	local _pparm, scatoms1, scatoms2, ccatoms1, ccatoms2, ti_atoms;
+
+	local psys = SystemPush 0;
+	local old_pparm = GetPParm [];
+
+	[_atoms0,_atoms1,scatoms1,scatoms2,ccatoms1,ccatoms2,ti_atoms] = (
+	    ti_PrepareSystem [
+		leg, (Atoms[])[_atoms0], (Atoms[])[_atoms1], opt
+	    ]
+	);
+	local ti_region_has_water = orE sm_Match [
+	    TIP3P, cat [scatoms1,scatoms2,ccatoms1,ccatoms2]
+	];
+	local noshakemask = cat [
+	    noshake_atoms [scatoms1,ccatoms1]
+	,   noshake_atoms [scatoms2,ccatoms2]
+	];
+
+	local opt_ti = [
+	    lambda	: 0.5
+	,   softcore	: 0
+	,   atoms1	: aNumber _atoms0
+	,   atoms2	: aNumber _atoms1
+	,   scmask1	: aNumber scatoms1
+	,   scmask2	: aNumber scatoms2
+	,   noshakemask	: aNumber noshakemask
+	,   fastwater	: not (ti_region_has_water and length noshakemask)
+	];
+
+	aSetPos [ccatoms1, 0.5 * (aPos ccatoms1 + aPos ccatoms2)];
+	aSetPos [ccatoms2, 0.5 * (aPos ccatoms1 + aPos ccatoms2)];
+
+	local pparm = GetPParm [];
+	SetPParm old_pparm;
+
+	local opt_md = tagcat [opt.opt_md, [
+	    sample		: sample_p	// ps sampling
+	,   sample_pr		: sample_p/10	// stats more frequently
+	,   dt			: 0.002
+	,   bondConstraints	: 'light'	// shake mode
+	]];
+
+	// !!! opt_md.hpc is undocumented! (meant to be opt_md.opt_hpc?)
+	local hopt = tagjoin [opt.opt_hpc, ['name', 'jhash']];
+	opt_md.hpc = tagcat [hopt, opt_md.hpc];
+
+	if orE eqE [opt_md.bondConstraints, ['light','all']] then
+	    opt_md.dt = min [0.002, add opt_md.dt];
+	endif
+	if orE eqE [opt_md.bondConstraints, ['','none']] then
+	    opt_md.dt = min [0.001, add opt_md.dt];
+	endif
+	if length noshakemask then
+	    opt_md.dt = min [0.001, add opt_md.dt];
+	endif
+
+	local ti_set = cat [scatoms1,scatoms2,ccatoms1,ccatoms2];
+	oSetCollection ['AMBER_TI_SCMASK1', scatoms1];
+	oSetCollection ['AMBER_TI_SCMASK2', scatoms2];
+	oSetCollection ['AMBER_TI_ATOMS', ti_set];
+	oSetCollection ['AMBER_TI_CORE', cat [ccatoms1,ccatoms2]];
+	oSetCollection ['AMBER_TI_NOSHAKEMASK', (Atoms[])[opt_ti.noshakemask]];
+
+	const LEGNAME = [b: 'bound', u: 'unbound'];
+	vwrite ['AMBER_TI: create {} {} simulations\n'
+	,    length step
+	,    LEGNAME.(leg)
+	];
+
+	for i = 0, opt.nlambda loop
+	    local prot;
+	    local path = fcat [filebase, tok_cat [leg, itok i]];
+	    step_path(inc i) = path;
+
+	    local old_prio = task_prio 0;
+	    SetPParm pparm;
+
+	    opt_ti.lambda = step(inc i);
+	    opt_ti.softcore = i <> 0;
+
+	    _fmkdir path;
+
+	    if i == 0 then prot = p_equil;
+	    else	   prot = p_step;
+	    endif
+
+	    opt_md.opt_ti = opt_ti;
+	    opt_md.verbose = 0;
+	    opt_md.ti_parent = select [
+		fcat [filebase, tok_cat [leg, itok 0]], '', i > 0
+	    ];
+
+	    AMBER_Initialize [ fcat [path, 'sim'], prot, opt_md ];
+	    if i <> 0 then
+		fdelete fcat [path, 'sim.a.0.coor'];
+		fdelete fcat [path, 'sim.z.refc'];
+		fdelete fcat [path, 'sim.z.prmtop'];
+	    endif
+	    vwrite ['    lambda={n:11.9f} dir={}\n', step(inc i), path];
+
+	    SetPParm old_pparm;
+	    task_prio old_prio;
+	endloop
+
+	SystemPop psys;
+//	vwrite ['AMBER_TI: {} sec\n', clock[] - t0];
+    endloop
+
+    SystemPop [osys,nsys];
+endfunction
+
+#if 0
+// AMBER_TI_SCRIPT_* is the master script template
+
+const AMBER_TI_SCRIPT_HEADER =
+#   string
+    #_HPC_INSERT:header
+    # usage: sh run.sh [options] ... (sh run.sh -help for details)
+    set -e
+# ;
+#endif
+const AMBER_TI_SCRIPT_TASK0 =
+#   string
+
+    # task_id is set to the task number 0,1,2,...,task_N.
+    # Task 0 is a cleanup/epilog task.
+    # NOTE! THE CURRENT DIRECTORY MUST BE WHERE THIS SCRIPT RESIDES
+
+    if [ "$task_id" -eq 0 ]; then
+	MOEBATCH -exec "AMBER_TI_Analyze '.'" -exit
+	exit 0;
+    fi
+# ;
+
+const AMBER_TI_SCRIPT_TASK =
+#   string
+
+    # Each simulation requires a (bound,unbound) equilibration task
+    # and (bound,unbound)*(1,...nlambda) sampling tasks.  The sampling
+    # tasks of a job only start after the equilibration tasks are done.
+    # Total tasks: T = njobs*2*(1+n_lambda) numbered 0,1,...,T-1.
+
+    #_HPC_INSERT:ti_njobs
+    #_HPC_INSERT:ti_nlambda
+
+    #_HPC_INSERT:ti_jdir
+    #_HPC_INSERT:ti_wdir
+
+    jdir=$(( ($task_id-1) / (2*(1+$ti_nlambda)) ));
+    jdir=${ti_jdir#*[<]$jdir[>]}; jdir=${jdir%%[<]*};
+
+    jwin=$(( ($task_id-1) % (2*(1+$ti_nlambda)) ));
+    jwin=${ti_wdir#*[<]$jwin[>]}; jwin=${jwin%%[<]*};
+
+    # If we are in an equilibration step (ending in [bu]000) then we can
+    # perform the simulation.  If we are not in an equilibration step then
+    # we have to copy the final coordinates from the equilibration step.
+    # NOTE! We use the final [bu]000 coordinates as the .refc tethers
+    # which cause them to move from the original locations.
+
+    printf "[%6i] %s\\n" $task_id "$jdir/$jwin"
+
+    if [ "$jwin" \\< "u000" ]; then src="b000";
+    else			    src="u000";
+    fi
+
+    z_refc=""
+    z_protocol=""				# override
+
+    if [ "${jwin##[bu]}" != "000" ]; then
+	if [ -s "lambdaprotocol" ]; then
+	    z_protocol="../../lambdaprotocol";
+	fi
+	if [ ! -f "$jdir/$jwin/sim.a.0.moe" ]; then
+	    cp "$jdir/$src/sim.a.0.moe" "$jdir/$jwin/sim.a.0.moe"
+	fi
+	if [ ! -f "$jdir/$jwin/sim.a.0.coor" ]; then
+	    cp "$jdir/$src/sim.a.0.coor" "$jdir/$jwin/sim.a.0.coor"
+	    touch "$jdir/$jwin/sim.a.0.valid"
+	fi
+	z_refc="../$src/sim.a.0.coor"
+    fi
+
+    (
+	export MOE_AMBER_EXE ;
+	export MOE_AMBER_TI_PRMTOP="../$src/sim.z.prmtop"
+	export MOE_AMBER_TI_REFC="$z_refc"
+	export MOE_AMBER_TI_PROTOCOL="$z_protocol"
+	cd "$jdir/$jwin"
+	sh "sim.z.sh" -qsys sh -host "" -name "$jdir/$jwin" -tid 1 --
+    )
+    exit 0
+# ;
+
+global function AMBER_TI_Initialize [filebase, rec, lig, opt]
+    const PUSH = 1;
+
+    opt = tagcat [opt, AMBER_TI_DEFAULTS];
+    opt = opt | indexof [tags opt, tags AMBER_TI_DEFAULTS];
+
+    opt.T = max [1, opt.T];
+    opt.nlambda = max [3, int opt.nlambda];	// # integration steps
+
+    local [I,J] = int opt.edge;			// simulation edges
+
+    local atoms = append [lig, rec];
+    local mask = m_uniq cat atoms;
+    atoms = split [cat atoms | mask, s_add [mask, app length atoms]];
+
+    function vwrite arg
+	if not opt.verbose then return; endif
+	write arg;
+    endfunction
+
+    if opt.verbose then
+	write ['AMBER_TI_Initialize {n:.2f} started {}\n',
+	    (modenv[]).version, asctime[]
+	];
+	write [ 'AMBER_TI_Initialize [\n'];
+	write [ '    {v}\n',			filebase ];
+	write [ ',   [ /* atoms: {} */ ]\n',	length last atoms ];
+	write [ ',   [ /* ligands: {} */ ]\n',	dec length atoms ];
+	write [ ',   [\n'];
+	write [ '        T           : {}\n',	opt.T ];
+	write [ '    ,   P           : {}\n',	opt.P ];
+	write [ '    ,   core        : {}\n',	opt.core ];
+	write [ '    ,   nlambda     : {}\n',	opt.nlambda ];
+	write [ '    ,   edge        : [ /* edges: {} */ ]\n', l_length[I,J]];
+	write [ '    ,   ps_emin     : {}\n',	opt.ps_emin ];
+	write [ '    ,   ps_equil    : {}\n',	opt.ps_equil ];
+	write [ '    ,   ps_equil_w  : {}\n',	opt.ps_equil_w ];
+	write [ '    ,   ps_sample   : {}\n',	opt.ps_sample ];
+	write [ '    ,   ps_sample_p : {}\n',	opt.ps_sample_p ];
+	write [ '    ,   npt         : {}\n',	opt.npt ];
+	write [ '    ,   pcharge     : {v}\n',	opt.pcharge ];
+	write [ '    ,   mm_gtest    : {}\n',	opt.mm_gtest ];
+	write [ '    ,   opt_solvate : {v}\n',	opt.opt_solvate ];
+	write [ '    ,   opt_hpc     : {v}\n',	opt.opt_hpc ];
+	write [ '    ,   opt_md      : {v}\n',	opt.opt_md ];
+	write [ '    ,   verbose     : {}\n',	opt.verbose ];
+	write [ '    ]\n'];
+	write [ '];\n'];
+    endif
+
+    local moemsg = 0;
+
+    function mwrite arg
+	if MOE_BATCH then return; endif
+	if not opt.verbose then return; endif
+	moemsg = Message [moemsg, twrite arg];
+    endfunction
+
+    mwrite ['AMBER_TI...'];
+
+	// Push the relevant atoms into a new system and add H's etc.
+
+#   if PUSH
+	local [osys, nsys, keys] = SystemPush cat atoms;
+#   else
+	UndoSnapshot [];
+	local [osys, nsys, keys] = [0,0, cat atoms];
+#   endif
+    local i, j;
+
+    keys = split [keys, app length atoms];
+    lig = droplast keys;
+    rec = last keys;
+
+    pot_FinalizeModel [];				// prepare atoms
+    rec = rec | oValid rec;
+    rec = uniq cat prepend [aLightBonds rec, rec];
+    for i = 1, length lig loop
+	lig(i) = lig(i) | oValid lig(i);
+	lig(i) = uniq cat prepend [aLightBonds lig(i), lig(i)];
+	lig(i) = lig(i)[x_sort aNumber lig(i)];
+    endloop
+    oDestroy diff [Atoms[], cat append [lig,rec]];	// just in case
+
+	// Calculate the partial charges of the ligand atoms
+
+    local lig_Q = app add aIon lig;
+
+    vwrite ['AMBER_TI: receptor: {} atoms\n', length rec];
+    vwrite ['AMBER_TI: ligands : {} molecules\n', length lig];
+
+    local lfmt = twrite [
+	'    [{{4}] atoms (A): {{n:3}  ion (Q): {{n:3} ({{t:-{}u}) {{}\n'
+    ,   max [2, utf8_length 'FF - failed', utf8_length opt.pcharge]
+    ];
+    for i = 1, length lig loop
+	local qmsg = 'FF';
+	if opt.pcharge <> '' then
+	    local [res,code] = task_call [
+		'PartialCharge', [lig(i),opt.pcharge], [errmsg: 'ignore']
+	    ];
+	    if code <> '' then
+		qmsg = twrite ['FF - failed: {}', res];
+	    else
+		aSetCharge [lig(i), first res];
+		qmsg = opt.pcharge;
+	    endif
+	endif
+	vwrite [lfmt
+	,   i
+	,   length lig(i)
+	,   lig_Q(i)
+	,   qmsg
+	,   sm_ExtractUnique lig(i)
+	];
+    endloop
+
+	// Create a fan (star+ring) simulations plan if one was not provided.
+	//	{(1,2),(1,3),...,(1,n-1)} + {(1,2),(2,3),(n,1)}
+
+    if l_length [I,J] <= 1 then
+	if length lig == 2 then
+	    [I,J] = [1,2];
+	elseif length lig > 2 then
+	    local idx = x_id lig;
+	    I = cat [ rep [idx(1), length idx - 3], idx ];
+	    J = cat [ drop [droplast idx, 2], rotl idx  ];
+	endif
+    endif
+
+    [I,J] = apt get [[I,J], [x_sort l_frank [I,J]]];	// in order
+    [I,J] = [I,J] || [ m_uniq l_frank [I,J] ];		// unique edges
+
+    opt.edge = [I,J];
+
+    if opt.verbose then
+	write ['AMBER_TI: simulation plan:\n'];
+	apt write [ '    {4} -> {4}  | dA = {n:3}  dQ = {n:2}\n'
+	,   I
+	,   J
+	,   (app length lig)[I] - (app length lig)[J]
+	,   lig_Q[I] - lig_Q[J]
+	];
+    endif
+
+	// Create the main simulations directory
+
+    vwrite ['AMBER_TI: create directory: \'{}\'\n', fabsname filebase];
+    _fdeleteR filebase;		// warning: can (silently) partially fail
+    sleep 0.1;	// protection for windows to finish delete process
+    _fmkdir filebase;		// won't fail even if the delete fails
+
+	// Refine the atoms simultaneously while maximizing overlap
+
+    if orE app length lig then
+	mwrite ['AMBER_TI_Initialize: mean field minimization'];
+	vwrite ['AMBER_TI: mean field minimization\n'];
+	MeanFieldMinimize [lig, [dfix: 10, dinert: 15, gtest: 1.0]];
+    endif
+
+    WriteMOE fcat [filebase, 'plan.moe'];
+    fcompress fcat [filebase, 'plan.moe'];
+
+	// Calculate the tautomer strain energy for each ligand
+
+    local Etaut = rep [0, length lig];
+
+    for i = 1, length lig loop
+	Etaut(i) = QuaSAR_acalc_EHT [lig(i), 'h_pstrain'];
+    endloop
+
+	// Calculate the MM/GBVI bining energy between each ligand and
+	// the receptor.  Fix atoms far from any ligand.
+
+    local Emmgb = rep [0, length lig];
+
+    local rfix = one rec;
+    local prox = prox_open [10, aPos rec, 15];
+    for i = 1, length lig loop
+	rfix[second prox_find [prox, aPos lig(i), 0]] = 0;
+    endloop
+    prox_close prox;
+
+    if length rec then
+	mwrite ['AMBER_TI: calculating MM/GBVI'];
+	vwrite ['AMBER_TI: calculating MM/GBVI:\n'];
+
+	local mmgb_setup = [
+	    eleDielectric : 1, solDielectric	: 80
+	,   cutoffOn	  : 8, cutoffOff	: 10
+	,   eleEnable	  : 1, solEnable	: 1
+	,   eleDist	  : 0
+	];
+
+	for i = 1, length lig loop
+	    local [m_osys,m_nsys,m_keys] = SystemPush cat [rec, lig(i)];
+	    local m_rec = keep [m_keys, length rec];
+	    local m_lig = drop [m_keys, length rec];
+	    aSetFixed [m_rec, rfix];
+	    aSetFixed [m_lig, 0];
+	    mwrite [
+		'AMBER_TI_Initialize: calculating MM/GBVI {}/{}\n'
+	    ,	i
+	    ,	length lig
+	    ];
+	    MM [
+		gtest		: 0.1
+	    ,   pot_finalize	: 0
+	    ,   pot_charge	: 0
+	    ,   careful		: 1e4
+	    ,   potSetup	: mmgb_setup
+	    ,	verbose		: 0
+	    ];
+	    Emmgb(i) = dock_score_GBVIWSA_dG ['scoreLigX', [m_rec, m_lig]];
+	    vwrite ['    {4} : {n:10.3f}\n', i, Emmgb(i)];
+	    SystemPop [m_osys,m_nsys];
+	endloop
+    endif
+
+	// Generate the the individual simulations and record the plan
+	// in the filebase/plan.mdb
+
+    local mdb = db_Open [fcat [filebase,'plan.mdb'], 'create'];
+    db_SetEnv [mdb, 'AMBER_TI', twrite ['{v}', opt]];
+
+    db_EnsureField [mdb, 'sim', 'char'];
+    db_EnsureField [mdb, 'skip', 'int'];
+    db_EnsureField [mdb, 'I', 'int'];
+    db_EnsureField [mdb, 'mol_I', 'molecule'];
+    db_EnsureField [mdb, 'J', 'int'];
+    db_EnsureField [mdb, 'mol_J', 'molecule'];
+    db_EnsureField [mdb, 'dQ', 'int'];
+    db_EnsureField [mdb, 'dM', 'int'];
+    db_EnsureField [mdb, 'dG(mmgb)', 'float'];
+    db_EnsureField [mdb, 'dG(exp)', 'float'];
+    db_EnsureField [mdb, 'ddG', 'float'];
+    db_EnsureField [mdb, 'ddG_err', 'float'];
+    db_EnsureField [mdb, 'rank', 'int'];
+    db_EnsureField [mdb, 'raw_ddG', 'int'];
+    db_EnsureField [mdb, 'raw_ddG_err', 'int'];
+    db_EnsureField [mdb, 'raw_data', 'int'];
+
+#   if 0
+	dbv_Open db_Filename mdb;
+#   endif
+
+    local dmol = app mol_Extract lig;
+
+    for i = 1, length dmol loop
+	dmol(i) = mol_aSetPos [dmol(i), DepictionCoordinates [dmol(i)]];
+	db_Write [mdb, 0, [
+	    sim		: ""
+	,   I		: i
+	,   mol_I	: dmol(i)
+	,   J		: []
+	,   mol_J	: []
+	,   dQ		: add dmol(i)(4)(MOL_ATOM_ION)
+	,   dM		: Etaut(i)
+	,   'dG(mmgb)'	: Emmgb(i)
+	]];
+    endloop
+
+	// Emit the shell scripts with the various simulation directories
+	// listed in a space separated list
+
+    local sh_name = fcat [filebase, 'run.sh'];
+    local sh_num = fopenw sh_name;
+    fwriteb [sh_num, 'char', "#!/bin/sh\n"];	// outside hpc_EmitScript
+
+    local zpad = rep ["0", ceil log10 max [10, length lig]];
+    local jname = rep ['', l_length [I,J]];
+
+    for i = 1, l_length [I,J] loop
+	jname(i) = twrite [
+	    'm{}_m{}'
+	,   keep [cat [zpad, string totok I(i)], -length zpad]
+	,   keep [cat [zpad, string totok J(i)], -length zpad]
+	];
+    endloop
+
+	// Create a dependence directed acyclyc graph on the tasks {1,..,N}.
+	// Each TI simulation requires 2*(1+n_lambda) tasks divided into
+	// the bound and unbound blocks.  The first task of each block
+	// is an equilibration block which must be done before the sampling.
+
+    local nsim = l_length [I,J];	// number of TI simulations
+    local ntasks = inc opt.nlambda;	// number of tasks / TI sim / 2
+
+    function TaskIndex [sim, bound, win] = iadd [
+	dec sim * 2 * ntasks			// sim = 1, 2, ..., nsim
+    ,	bound * ntasks				// bound = 0,1
+    ,	win					// win = 0, 1, ..., ntasks
+    ,	1
+    ];
+    local dag = apt cat [
+	[
+	    TaskIndex [
+		stretch [igen nsim, ntasks]
+	    ,   0
+	    ,   cat rep [dec igen ntasks, nsim]
+	    ],
+	    TaskIndex [ stretch [igen nsim, ntasks], 0, 0 ]
+	],
+	[
+	    TaskIndex [
+		stretch [igen nsim, ntasks]
+	    ,   1
+	    ,   cat rep [dec igen ntasks, nsim]
+	    ],
+	    TaskIndex [ stretch [igen nsim, ntasks], 1, 0 ]
+	]
+    ];
+    local hopt = tagcat [opt.opt_hpc, [
+	postproc: 1	// submit an epilog task (task_id=0)
+    ,	header:	  1	// emit header: "# Automatically generated on ..."
+    ,	usage:	  "sh run.sh [options] ... (sh run.sh -help for details)"
+    ]];
+
+    hpc_Script [sh_num, nsim*2*ntasks, '', dag, hopt];	// emit run.sh
+
+	// Write the analysis section to extract the dV/dL values
+	// from the "sample" patterns
+
+    hpc_EmitScript [imoe_MustFind '$MOE/lib/sh/amber_init.sh', sh_num];
+    hpc_EmitScript [imoe_MustFind '$MOE/lib/sh/moe_init.sh', sh_num];
+    hpc_EmitScript [imoe_MustFind '$MOE/lib/sh/moe_u.sh', sh_num];
+    hpc_EmitScript [AMBER_TI_SCRIPT_TASK0, sh_num];
+
+    local ti_jdir = cat apt swrite ['<{}>{}', dec x_id jname, jname];
+    local ti_wdir = cat apt swrite [
+	'<{}>{}{}'
+    ,	dec igen (2 * inc opt.nlambda)
+    ,	select ["u", "b", dec igen (2 * inc opt.nlambda) <= opt.nlambda]
+    ,	cat rep [
+	    apt keep [apt swrite ['000{}', dec igen inc opt.nlambda], -3]
+	,   2
+	]
+    ];
+
+    hpc_EmitScript [AMBER_TI_SCRIPT_TASK, sh_num, [
+	ti_njobs   : swrite ['ti_njobs={}', l_length [I,J]]
+    ,	ti_nlambda : swrite ['ti_nlambda={}', opt.nlambda]
+    ,	ti_jdir    : swrite ['ti_jdir={}', sh_LongString ti_jdir]
+    ,	ti_wdir    : swrite ['ti_wdir={}', sh_LongString ti_wdir]
+
+    ]];
+
+    jname = fcat [filebase,jname];
+    for i = 1, l_length [I,J] loop
+	mwrite ['AMBER_TI_Initialize: simulation {} ({} of {})',
+	    jname(i), i, length I
+	];
+	_AMBER_TI_Initialize [jname(i), rec, lig(I(i)), lig(J(i)), opt];
+	db_Write [mdb, 0, [
+	    sim	  : string ftail jname(i)
+	,   I	  : I(i)
+	,   J	  : J(i)
+	,   mol_I : dmol(I(i))
+	,   mol_J : dmol(J(i))
+	,   dQ	  :   add dmol(J(i))(4)(MOL_ATOM_ION)
+		    - add dmol(I(i))(4)(MOL_ATOM_ION)
+	,   dM	  : Etaut(J(i)) - Etaut(I(i))
+	]];
+    endloop
+
+    fclose sh_num;
+    _fsetpermissions [sh_name, 7];
+    db_Close mdb;
+
+	// Pop the system and get out
+
+#   if PUSH
+	SystemPop [osys,nsys];
+#   endif
+    Message [moemsg, []];
+    vwrite ['AMBER_TI_Initialize {n:.2f} done {}\n',
+	(modenv[]).version, asctime[]
+    ];
+    vwrite ['unix> sh "{}"\n', fabsname sh_name];
+endfunction
+
+// ---------------------------- AMBER TI ANALYSIS -----------------------------
+
+// XW_Fejer returns the abcissa and weights for applying Fejer quadrature on
+// the interval [a,b] with n samples.  The abcissa are the same as Chebyshev.
+// T[0](x) = 1, T[n+1](x) = 2xT[n](x) - T[n-1](x)
+
+local function XW_Fejer [a, b, n]
+    local g = (igen n - 0.5) * (PI/n);
+    local x = cos g;
+    local w = zero x;
+    local j, m;
+
+	// M(1+i) = integral{-1,1} Ti, i = 0,...,n-1
+	// local M = (1 + pow [-1, dec igen n]) / (1 - sqr dec igen n);
+
+    for j = 1, n loop
+	local t = 0.5 * 2;
+	for m = 2, dec n loop
+	    t = t + (1 + pow [-1, m]) / (1 - sqr m) * cos (m * g(j));
+	endloop
+	w(j) = (2/n) * t;
+    endloop
+
+    x = (b+a)/2 - (b-a)/2 * x;
+    w = (b-a)/2 * w;
+    return [x,w];
+endfunction
+
+// ScanWindow scans the files of a simulation window directory.  We extract
+// the stage names, time and dV/dL values.  Return [stage,stageseg,t,dvdl].
+
+local function ScanWindow dirname
+    local name = fcat [dirname,'sim.z.out'];
+    if ftype name <> 'file' then return [[],[],[],[]]; endif
+
+    local fnum = fopenr name;
+    local hidx = indexof [
+	['stage','t','dVdL']
+    ,	app token wordsplit [first freadb [fnum,'line',1], ","]
+    ];
+    local line;
+    local ndata = 0, data = [];
+
+    while length (line = freadb [fnum, 'line', 1]) loop
+	line = app token (wordsplit [cat line, ","])[hidx];
+	line(2) = atof line(2);
+	line(3) = atof line(3);
+	if ndata >= length data then data = cat [data, app null data]; endif
+	data(ndata = inc ndata) = line;
+    endloop
+
+    data = tr keep [data, ndata];
+    fclose fnum;
+
+    return [data(1) | btom data(1), btoc data(1), data(2), data(3)];
+endfunction
+
+// ScanSimulation scans a TI simulation and extracts the relevant info.
+
+local function ScanSimulation [d_name, stagepat]
+    local i;
+
+    if token stagepat == '' then stagepat = '*'; endif
+#   if 0
+	write ['Scanning {}/* stage:\'{}\' ...\n', d_name, token stagepat];
+#   endif
+    d_name = flist [d_name, '[bu]###'];
+    d_name = d_name | not m_findmatch ['[bu]000', ftail d_name];
+    d_name = d_name | ftype d_name == 'dir';
+    d_name = sort d_name;
+
+    local nlambda = max atof tok_keep [d_name,-3];
+
+    local d_bound = m_findmatch ['[bB]###', ftail d_name];
+    local d_step = int atof tok_drop [ftail d_name,1];
+    local d_lambda = rep [-1, length d_name];
+    local d_sname = rep [[], length d_name];
+    local d_sseg = rep [[], length d_name];
+    local d_stime = rep [[], length d_name];
+    local d_sdata = rep [[], length d_name];
+
+    for i = 1, length d_name loop
+	local [sname, sseg, stime, sdata] = ScanWindow d_name(i);
+	d_lambda(i) = atof tok_keep [d_name(i), -3];
+	d_lambda(i) = 0.5 * (1 + cos ((d_lambda(i) - 0.5) * PI / nlambda));
+	d_sname(i) = sname;
+	d_sseg(i) = sseg;
+	d_stime(i) = stime;
+	d_sdata(i) = sdata;
+#	if 0
+	    write ['    [{}] lambda:{n:9.6f} samples:{6}\n'
+	    ,   ftail d_name(i)
+	    ,   d_lambda(i)
+	    ,   length d_sdata(i)
+	    ];
+#	endif
+    endloop
+
+    return [
+	d_bound  : d_bound
+    ,	d_step   : d_step
+    ,	d_lambda : d_lambda
+    ,	d_sname  : d_sname
+    ,	d_sseg	 : d_sseg
+    ,	d_stime  : d_stime
+    ,	d_sdata  : d_sdata
+    ];
+endfunction
+
+// SolveFreeEnergy accepts a simulation transition graph, purported
+// thermodyamic graph, (I, J, dG, dG_err) and calculates free energies
+// of the N molecules indexed in I and J.
+//
+// We solve the following least squares problem
+//
+//	g = argmin{g} 0.5 * (Rg - dG)' W (Rg - dG)
+//
+// where is the matrix with each row R(i) of R is an N-vector containing
+// 1 at column J(i) and -1 at column I(i) and W is a diagonal matrix of
+// weights W = dGe**-2.  Differentiating, we have that
+//
+//	(Rg - dG)' WR = 0
+//	g = (R'WR)**-1 R'W dG
+//
+// This method downweights high variance edges and is more consistent with
+// simulation plans that assume uniform variances of the edges.
+
+local function SolveFreeEnergy [N, I, J, dG, dGe]
+    [I,J,dG,dGe] = apt resize [[I,J,dG,dGe], l_length [I,J,dG,dGe]];
+
+	// Form the m by n edge-node incidence matrix and inverse
+	// variances weightings W.  Then calculate the basic solution
+	// and associated variances on the molecules.
+
+    local W = inv sqr maxE [0.01, dGe];
+    local R = apt put [ [rep[0,N]], tr [I,J], [[-1,1]] ], trR = tr R;
+
+    local A = matmul [matinv matmul [trR, R], tr R];
+
+    local mG0 = matmul [A, dG];			// molecule dG
+    local mGe = app add sqr (A * [dGe]);	// molecule dGe (var)
+
+	// Perform a leave-one-out simulation on those edges
+	// that are in cycles.
+
+    function Solve [zidx, dg]			// solve with W[zidx]=0
+	local w = put [W, zidx, 0];
+	local A = matinv matmul [trR, w * R];
+	return matmul [A, trR, w * dg];
+    endfunction
+
+    local mG_sum = mG0, mG_ssq = sqr mG_sum, mG_n = one mG_sum;
+
+    local rcode = (graph_dfs2 graph_uneighbors [I,J,N])(7);
+    local i;
+
+    for i in x_pack (rcode[I] and rcode[I] == rcode[J]) loop
+	local mG = Solve [i, dG];
+	mG_sum = mG_sum + mG;
+	mG_ssq = mG_ssq + sqr mG;
+	mG_n = mG_n + 1;
+    endloop
+
+	// Produce the mean and variance estimates
+
+    mG_sum = mG_sum / mG_n;
+    mG_ssq = maxE [0, mG_ssq / mG_n - sqr mG_sum];
+
+    return [mG_sum, sqrt (mG_ssq + mGe)];
+endfunction
+
+#if 0
+local function main []
+    local [I,J,dG,dGe] = tr [
+	[1, 2,  1, 1.0]
+    ,	[2, 3,  3, 2.0]
+    ,	[3, 1, -2, 2.0]
+    ,	[4, 2,  1, 2.0]
+    ,	[3, 4, -2, 2.0]
+    ];
+    local N = max app max [I,J];
+    local [mG, mGe] = SolveFreeEnergy [N, I, J, dG, dGe];
+
+    print [mG: mG - mG(1), mGe: mGe];
+    print add mG;
+endfunction
+#endif
+
+// SimulationGraph reads out the the simulation topology and ddG results and
+// draws the simulation graph and associated data
+
+local function DrawSimulationGraph filename
+    local i;
+
+	// Read out the data (assumed to be updated)
+
+    local mdb = db_Open filename;
+    local m_ent = db_Entries mdb;
+    local m_I = zero m_ent, m_J = m_I, m_skip = m_I;
+    local m_ddG = zero m_ent, m_ddG_err = m_ddG;
+
+    for i = 1, length m_ent loop
+	local data = db_Read [mdb, m_ent(i)];
+	m_skip(i) = istrue data.skip;
+	m_I(i) = add data.I;
+	m_J(i) = add data.J;
+	m_ddG(i) = data.ddG;
+	m_ddG_err(i) = data.ddG_err;
+    endloop
+
+    m_ddG = mput [m_ddG, m_skip, [[]]];
+    m_ddG_err = mput [m_ddG_err, m_skip, [[]]];
+
+    local ti_opt = eval token db_GetEnv [mdb,'AMBER_TI'];
+
+    db_Close mdb;
+
+    local xbond = graph_uneighbors ([m_I, m_J] || [ m_J and not m_skip ]);
+
+    local plan = [
+	p  : add ti_opt.ps_sample_p / 1000
+    ,	q  : add ti_opt.ps_equil_w  / 1000
+    ,	q0 : add ti_opt.ps_equil   / 1000
+    ,	M  : add ti_opt.ps_sample * invz add ti_opt.ps_sample_p
+    ,	m  : 0.5 * add app length xbond
+    ,	xbond : xbond
+    ];
+    plan.w = plan.m * (plan.q0 + plan.K * (plan.q * plan.p * plan.M));
+
+    local gr_key = run ['mdti_ui.svl', [plan], 'TI_PlannerGraphic'];
+    gr_export gr_key;
+    gr_destroy gr_key;
+endfunction
+
+// AutoCorrelation calculates the autocorrelation function (ACF), a, given
+// a time series x on equally spaced points (assumed non-periodic)
+//
+//	a[k] = sum_{i=1,n} (x[i] - u)(x[i+k] - u)	k = 0,1,...,(n-1)
+//
+// where x[k] = 0 for k > n.  We return the biased (Bartlett windowed)
+// estimate of the ACF.
+
+local function AutoCorrelation x
+    local n = length x;				// number of observations
+    if n <= 1 then return one x; endif		// [] or [1]
+
+    x = cat [x, zero x];
+    local [a,b] = dft [x,0];
+    x = first dftinv [sqr a + sqr b, 0];
+    x = keep [x,n];				// biased for non-periodic
+
+    if x(1) < n * EPS_M then return zero x; endif	// all zero?
+    return x / x(1);
+endfunction
+
+// MeasureStats takes a time series and measures the mean, standard deviation
+// and effective observations; we return [mean, stdev, n_eff].
+
+// Ref. Zeiba, A., Ramza, P.; Standard Deviation of the Mean of Autocorrelated
+// Observations Estimated with the use of the Autocorrelation Function
+// Estimated from the Data; Metrol. Meas. Sys. 18 (2011) 529-542.
+
+local function MeasureStats y
+    local n = length y;
+
+    if n < 2 then				// handle degenerate cases
+	if n <= 0 then return [0,0,0]; endif
+	return [y,0,1];
+    endif
+
+    local u = add y / n;			// sample mean
+    y = y - u;					// mean center
+
+    local r = AutoCorrelation y;		// r(0)=1, r(1), ... r(n-1)
+    if r(1) < EPS_M then return [0,0,n]; endif
+
+    local s = sqrt ((1 + 2 * pscan poke [sqr r, 1, 0]) / n);
+
+    local nc, n_eff;
+
+#   if 0
+	nc = add last x_pack (abs r > 1.96 * s);	// LSN method
+	if nc <= 0 then nc = n/4; endif
+	nc = max [1, min [nc, n/4]];
+	n_eff = inv sqr s(nc);		// effective observations
+#   else						// FNZ method
+	nc = add first x_pack (r > 0 and rotlpoke [r, 0] <= 0);
+	n_eff = (n - 2*nc - 1 + nc * (nc + 1) / n) / (n * sqr s(nc)) + 1;
+#   endif
+
+    n_eff = max [2, n_eff];
+    s = n_eff / (n_eff-1) / n * add sqr y;
+    s = sqrt s;
+    return [u, s, n_eff];
+endfunction
+
+// AMBER_TI_AnalyzePanel raises a panel that analyzes a TI simulation
+
+const DEFAULTS = [
+    stagepat	: 'sample'
+,   t_min	: 0
+,   t_max	: REAL_MAX
+,   update	: 1			// update from existing raw_data
+];
+
+local function RestrictTI [info, opt]
+    local i;
+
+    for i = 1, length info.d_step loop
+	local mask = andE [
+	    leE [opt.t_min, info.d_stime(i), opt.t_max]
+	,   stretch [m_findmatch[opt.stagepat,info.d_sname(i)], info.d_sseg(i)]
+	];
+	info.s_sseg = poke [info.d_sseg, i, s_add [mask, info.d_sseg(i)]];
+	info.d_stime = poke [info.d_stime, i, info.d_stime(i) | mask];
+	info.d_sdata = poke [info.d_sdata, i, info.d_sdata(i) | mask];
+    endloop
+
+    return info;
+endfunction
+
+global function AMBER_TI_Analyze [filebase, opt]
+    opt = tagcat [opt, DEFAULTS];
+    local mdb = 0;
+
+    if ftype filebase == 'dir' then
+	mdb = db_Open fcat [filebase, 'plan.mdb'];
+    else
+	mdb = db_Open filebase;
+	filebase = fpath filebase;
+    endif
+
+    db_EnsureField [mdb, 'skip', 'int'];
+    db_EnsureField [mdb, 'dG(exp)', 'float'];
+    db_EnsureField [mdb, 'ddG', 'float'];
+    db_EnsureField [mdb, 'ddG_err', 'float'];
+    db_EnsureField [mdb, 'rank', 'int'];
+    db_EnsureField [mdb, 'raw_ddG', 'float'];
+    db_EnsureField [mdb, 'raw_ddG_err', 'float'];
+    db_EnsureField [mdb, 'raw_data', 'byte'];
+
+	// Extract out the database information
+
+    local m_ent = rep [0, db_nEntries mdb];
+    local m_sim = rep ['', length m_ent];
+    local m_I = zero m_ent;
+    local m_J = zero m_ent;
+    local m_skip = zero m_ent;
+
+    local i, j;
+    local info, ent = 0, entnum = 0;
+
+    while ent = db_NextEntry [mdb, ent] loop
+	entnum = entnum + 1;
+	info = db_ReadFields [mdb, ent, ['sim','I','J','skip']];
+	m_ent(entnum) = ent;
+	m_sim(entnum) = token info(1);
+	m_I(entnum) = int add info(2);
+	m_J(entnum) = int add info(3);
+	m_skip(entnum) = istrue info(4);
+	db_Write [mdb, ent, [
+	    rank	: []
+	,   ddG		: []
+	,   ddG_err	: []
+	,   raw_ddG	: []
+	,   raw_ddG_err : []
+	]];
+    endloop
+
+    [m_ent,m_sim,m_I,m_J] = [m_ent,m_sim,m_I,m_J] || [
+	    m_ent
+	and m_I > 0 and m_J >= 0
+	and (isspace m_sim or (m_I and m_J))
+	and (not isspace m_sim or not m_J)
+    ];
+
+	// extract the basic information from the simulation directories
+	// and clear out the data from the fields to calculate
+
+    for i = 1, length m_ent loop
+	if isspace m_sim(i) then
+	    db_Write [mdb,m_ent(i),[raw_data:[]]];
+	    continue;
+	endif
+	if not opt.update then continue; endif
+	if opt.update < 2 then
+	    info = first db_ReadFields [mdb,m_ent(i),'raw_data'];
+	    if length info then continue; endif
+	endif
+	info = ScanSimulation fcat [filebase,m_sim(i)];
+	info = swriteb ['SVL', [info]];
+	db_Write [mdb,m_ent(i),[raw_data:info]];
+    endloop
+
+	// Scan the simulations again and calculate the raw ddG
+	// according to the options
+
+    local raw_ddG = rep [0, length m_ent];
+    local raw_ddG_err = rep [0, length m_ent];
+
+    for i in x_pack m_J loop
+	info = first db_ReadFields [mdb, m_ent(i), 'raw_data'];
+	info = first sreadb [info, 'SVL', 1];
+	info = RestrictTI [info, opt];		// applicable time and stages
+
+	local N = max [0, max info.d_step];
+	local b_avg = rep [0,N], u_avg = rep [0,N];
+	local b_std = rep [0,N], u_std = rep [0,N];
+	local b_len = rep [0,N], u_len = rep [0,N];
+
+	for j = 1, length info.d_step loop
+	    local x = info.d_sdata(j);
+	    local [u,s,n_eff] = MeasureStats x;
+
+	    if info.d_bound(j) then
+		b_avg(info.d_step(j)) = u;
+		b_std(info.d_step(j)) = s;
+		b_len(info.d_step(j)) = n_eff;
+	    else
+		u_avg(info.d_step(j)) = u;
+		u_std(info.d_step(j)) = s;
+		u_len(info.d_step(j)) = n_eff;
+	    endif
+	endloop
+
+	local [Fx,Fw] = XW_Fejer [0,1,N];		// integration weights
+
+	raw_ddG(i) = add (Fw * (b_avg - u_avg));	// integrate
+	raw_ddG_err(i) = sqrt add (			// error
+	      add sqr (Fw * b_std) * invz b_len
+	    + add sqr (Fw * u_std) * invz u_len
+	);
+
+	db_Write [mdb, m_ent(i), [
+	    raw_ddG	: raw_ddG(i)
+	,   raw_ddG_err	: raw_ddG_err(i)
+	]];
+    endloop
+
+	// Calculate the dG for each of the molecules with a least squares
+	// correction to a thermodynamic graph.  Calculate values per molecule
+	// such that raw_ddG(i) = mG(J(i)) - mG(I(i)).
+	// Adjust the ddG with any available experimental data
+	// Calculate an rank effective rank using the calculated errors.
+
+    local skip_mol = m_I | not m_J and m_skip;
+
+    local [I,J,ddG,ddG_err] = [m_I,m_J,raw_ddG,raw_ddG_err] || [
+	    m_J					// simulation edge
+	and not m_skip				// unskipped
+	and not indexof [m_I, skip_mol]
+	and not indexof [m_J, skip_mol]
+    ];
+
+    if orE orE not leE [1, [I,J], max (m_I | not m_J)] then
+	exit 'Inconsistent data in AMBER TI database';
+    endif
+
+    local mgraph = graph_uneighbors [I, J, add not m_J];
+    mgraph = graph_mget [mgraph, put [one m_I, skip_mol, 0]];
+
+    if length graph_ccomponent_list mgraph > 1 then
+	exit 'Disconnected simulation graph in AMBER_TI database';
+    endif
+
+    [ddG,ddG_err] = SolveFreeEnergy [add not m_J, I, J, ddG, ddG_err];
+
+    local dG_avg = 0, dG_exp = 0, dG_exp_n = 0;		// average accumulators
+
+    for i in x_pack (not m_skip and not m_J) loop
+	local t = first db_ReadFields [mdb, m_ent(i), 'dG(exp)'];
+	if not length t then continue; endif
+	dG_avg = dG_avg + ddG(m_I(i));
+	dG_exp = dG_exp + first t;
+	dG_exp_n = dG_exp_n + 1;
+    endloop
+
+    ddG = ddG + (dG_exp - dG_avg) * invz dG_exp_n;	// shift to average exp
+
+    local oldseed = randseed 12345678;
+    local m_rank = zero ddG;
+    const NSAMPLE = 10000;
+    for NSAMPLE loop
+	m_rank = m_rank + rank (ddG + randN maxE [0.01, ddG_err]);
+    endloop
+    m_rank = int (m_rank / NSAMPLE);
+    randseed oldseed;
+
+    for i = 1, length m_ent loop
+	if m_skip(i) then
+	    db_Write [mdb, m_ent(i), [
+		rank	: []
+	    ,	ddG	: []
+	    ,	ddG_err	: []
+	    ]];
+	elseif not m_J(i) then
+	    db_Write [mdb, m_ent(i), [
+		rank	 : m_rank(m_I(i))
+	    ,	ddG	 : ddG(m_I(i))
+	    ,	ddG_err  : ddG_err(m_I(i))
+	    ]];
+	else
+	    db_Write [mdb, m_ent(i), [
+		ddG	 : ddG(m_J(i)) - ddG(m_I(i))
+	    ,	ddG_err  : ddG(m_J(i)) - ddG(m_I(i)) - raw_ddG(i)
+	    ]];
+	endif
+    endloop
+
+    db_Close mdb;
+endfunction
+
+// AMBER_TI_AnalyzePanel raises a panel that analyzes a TI simulation
+
+global function AMBER_TI_AnalyzePanel [root, opt]
+    local mdb;
+
+    opt = tagcat [opt, DEFAULTS];
+    opt.update = 0;
+
+    if isnull root then
+	mdb = add (task_getenv[]).DB_VIEW;
+	if not mdb then exit 'Illegal AMBER TI database'; endif
+    else
+	if ftype root == 'dir' then root = fcat [root, 'plan.mdb']; endif
+	if not (mdb = _db_Open root) then
+	    exit twrite ['Cannot open {}', utf8_keep [root, 80]];
+	endif
+	db_Close mdb;
+	mdb = root;
+    endif
+
+    if MOE_BATCH then return; endif
+    local WNAME = twrite ['AMBER TI Analysis - {}', db_Filename mdb];
+    local wkey, wloc;
+
+    if dbv_Key mdb then
+	wkey = WindowKeyList [];
+	wloc = app WindowLocation wkey;
+	[wkey,wloc] = [wkey,wloc] || [ app length wloc ];
+	[wkey,wloc] = [wkey,wloc] || [ app first wloc == 'DBV_Plot' ];
+	[wkey,wloc] = [wkey,wloc] || [ app second wloc == dbv_Key mdb ];
+	dbv_Open db_Filename mdb;
+	if length wkey then return; endif
+    elseif WindowShow [WNAME, 1] then
+	return;
+    endif
+
+    if second task_fork [statics:'new', idle:1] <> 'child' then
+	return;
+    endif
+    task_settitle [-1, WNAME];
+    mdb = db_Open mdb;
+
+    local ti_opt = token db_GetEnv [mdb,'AMBER_TI'];
+    if isspace token ti_opt then
+	exit twrite ['{} is not an AMBER TI database', ftail db_Filename mdb];
+    endif
+    local [res,code] = task_call ['eval', ti_opt];
+    if code <> '' then
+	exit twrite ['{} is not an AMBER TI database', ftail db_Filename mdb];
+    endif
+    ti_opt = res;
+
+	// Determine the maximum number of windows in the simulations
+
+    local maxN = 0, t_min = REAL_MAX, t_max = 0, simlist = [];
+    local info, sim, ent = 0;
+
+    while ent = db_NextEntry [mdb, ent] loop
+	[sim,info] = db_ReadFields [mdb, ent, ['sim','raw_data']];
+	if isspace token sim then continue; endif
+	if not length info then continue; endif
+	info = first sreadb [info, 'SVL', 1];
+	maxN = max [maxN, max info.d_step];
+	t_min = min [t_min, min app min info.d_stime];
+	t_max = max [t_max, max app max info.d_stime];
+	simlist = append [simlist, token sim];
+    endloop
+
+    if t_max <= 0 then t_min = 0; endif
+
+#   if 0
+    if length simlist < 1 or maxN < 1 then
+	exit 'No simulation data for AMBER TI Analysis';
+    endif
+#   endif
+
+    local seriesColor = cat rep [resize [PLOT_COLORS, maxN], 2];
+    local seriesMarkerStyle = cat [
+	resize ['filled-square', maxN], resize ['filled-circle', maxN]
+    ];
+
+    function StepCheckboxes prefix
+	local i, boxes = [];
+	for i = 1, maxN loop
+	    boxes = append [boxes, [
+		Checkbox : [
+		    name: tok_cat [prefix, totok i], text: totok i,
+		    onTrigger: 'return'
+		]
+	    ]];
+	endloop
+	return cat boxes;
+    endfunction
+
+    if dbv_Key mdb then
+	wkey = [
+	    name: 'panel', title: 'AMBER TI Analysis',
+#if __WT_HAS_ATTR_HELPPAGE
+	    helpPage: 'AMBERTIAnalysis',
+#endif // __WT_HAS_ATTR_HELPPAGE
+	    location: ['DBV_Plot', dbv_Key mdb]
+	];
+    else
+	wkey = [
+	    name: 'panel', title: WNAME, windowName: WNAME,
+#if __WT_HAS_ATTR_HELPPAGE
+	    helpPage: 'AMBERTIAnalysis',
+#endif // __WT_HAS_ATTR_HELPPAGE
+	    text: 'Close', onTrigger: 'return'
+	];
+    endif
+    wkey = WindowCreate cat [wkey, [
+	Plot : [
+	    name: 'plot',
+	    foreground: 'white', background: 'black',
+	    flushLeft: 1, extendH: 1, extendV: 1,
+	    plotType: 'scatter',
+	    seriesColor: seriesColor,
+	    showGridlines: 1, showTicks: 1, showAxes: 1, showLegend:0,
+	    XAxisZoom: 0, YAxisZoom: 0
+	],
+	Hbox : [
+	    extendH: 1,
+	    Vbox : [
+		Option : [
+		    name: 'sim', type: 'char', title: 'Simulation:',
+		    text: simlist, onTrigger: 'return', extendH: 1,
+		    bubbleHelp:
+			'The transformation simulation between two molecules.'
+		],
+		Option : [
+		    name: 'fcn', type: 'char', title: 'Property:',
+		    text: [
+			'dV/dL'
+		    ,	'avg(dV/dL)prefix'
+		    ,	'avg(dV/dL)suffix'
+		    ,	'std(dV/dL)'
+		    ,	'AutoCorrelation'
+//		    ,	'Bartlett N'
+		    ],
+		    onTrigger: 'return', extendH:1,
+		    bubbleHelp:
+			'The property to plot\n'
+			'- dV/dL is the sampled TI derivative\n'
+			'- avg(dV/dL)prefix is the average dV/dL from the'
+							' start of data\n'
+			'- avg(dV/dL)suffix is the average dV/dL until the'
+							' end of data\n'
+			'- std(dV/dL) is the standard deviation'
+				' average dV/dL until the end of data\n'
+			'- AutoCorrelation is the autocorrelation of dV/dL'
+//			'- Bartlett is the Bartlett standard error'
+		]
+	    ],
+	    Vbox : [
+		Hbox : cat [ [ title: 'Bound:'   ], StepCheckboxes 'b_' ],
+		Hbox : cat [ [ title: '    Unbound:' ], StepCheckboxes 'u_' ],
+		bubbleHelp:
+		   'Each checkbox plots the property value of the simulation\n'
+		   'window of the Bound or Unbound transitions.'
+
+	    ],
+	    Vbox : [
+		Button : [ text:'Clear', name:'b_clear', onTrigger:'return' ],
+		Button : [ text:'Clear', name:'u_clear', onTrigger:'return' ],
+		bubbleHelp: 'Clear all of the Bound or Unbound checkboxes.'
+	    ],
+	    Vbox : [
+		Hbox : [
+		    title: '    t Range:',
+		    Text : [
+			name: 't_min', type: 'real', len: 10,
+			onTrigger: 'return', shortcut: totok t_min
+		    ],
+		    Text : [
+			name: 't_max', type: 'real', len: 10,
+			onTrigger: 'return', shortcut: totok t_max
+		    ],
+		    Label : [ text: ' ps' ],
+		    bubbleHelp:
+			'Retain only samples with time values (ps)\n'
+			'between the lower and upper bounds.'
+		],
+		Button : [
+		    text: 'Update ddG', name: 'update', extendH: 1,
+		    bubbleHelp:
+			'Update the calculated ddG values in the database\n'
+			'based on the specified time range restriction.'
+		]
+	    ]
+#if 0
+	,
+	    Vbox : [
+		Label : [],
+		Button : [
+		    text: 'Graph', name: 'graph'
+		,   bubbleHelp: 'Draw simulation graph'
+		]
+	    ]
+#endif
+	]
+    ]];
+
+    WindowSetData [wkey, [
+	sim	 : first simlist
+    ,	t_min	 : t_min
+    ,	t_max	 : t_max
+    ,	fcn	 : 'dV/dL'
+    ]];
+    WindowShow wkey;
+
+    function UpdatePlot val
+	local i, n;
+
+	local info = app token db_ReadColumn [mdb, 'sim'];
+	if not (i = indexof [val.sim, info]) then exit []; endif
+	info = first db_ReadFields [mdb, (db_Entries mdb)(i), 'raw_data'];
+	info = first sreadb [info, 'SVL', 1];
+
+	opt.t_min = val.t_min;
+	opt.t_max = val.t_max;
+	opt.filter = val.filter;
+
+	info = RestrictTI [info, opt];
+
+	local series = rep [[[],[]], 2 * maxN];
+	local u, s;
+
+	for i = 1, length info.d_step loop
+	    local step = info.d_step(i);
+	    step = twrite ['{}_{}', select ['b','u',info.d_bound(i)], step];
+	    if not val.(step) then continue; endif
+
+	    local x = info.d_stime(i);
+	    local y = info.d_sdata(i);
+
+	    if not length y then continue; endif
+
+	    if val.fcn == 'avg(dV/dL)suffix' then	// trailing avg dV/dL
+		y = pscan reverse y;
+		y = reverse (y / x_id y);
+	    elseif val.fcn == 'avg(dV/dL)prefix' then	// trailing avg dV/dL
+		y = pscan y;
+		y = (y / x_id y);
+	    elseif val.fcn == 'std(dV/dL)' then		// trailing std dV/dL
+		u = pscan reverse y;
+		u = reverse (u / x_id u);
+		y = pscan reverse sqr y;
+		y = reverse (y / x_id y);
+		y = sqrt (y - sqr u);
+	    elseif val.fcn == 'AutoCorrelation' then
+		y = y - add y / length y;
+		y = AutoCorrelation y;
+		x = x_id x * (x(2) - x(1));			// spacing
+
+		[x,y] = apt keep [[x,y], l_length [x,y] / 2];
+		[x,y] = app dropfirst [x,y];
+
+	    elseif val.fcn == 'Bartlett N' then
+		y = y - add y / length y;
+		y = AutoCorrelation y;
+
+		local se = (1 + 2 * rotrpoke [pscan sqr y, 0]) / length x;
+		se = sqrt se;
+
+#if 0
+		y = inv sqr se
+		  * inv sqrt (2 * PI) * exp (-0.5 * sqr y / sqr se)
+		  ;
+#else
+		y = inv sqr se * 0.5 * erfc (abs y / se / sqrt 2);
+#endif
+		x = x_id y * one (x(2) - x(1));			// spacing
+
+		[x,y] = app dropfirst [x,y];
+	    endif
+
+	    step = info.d_step(i);
+	    if not info.d_bound(i) then step = step + maxN; endif
+	    series(step) = [x,y];
+	endloop
+
+	WindowSetAttr [wkey, [ plot : [
+	    series: series
+	]]];
+    endfunction
+
+    function DoUpdate mdb
+	local ent = 0;
+	while ent = db_NextEntry [mdb, ent] loop
+	    local [sim,raw_data] = db_ReadFields [mdb, ent, ['sim','raw_data']];
+	    if length sim and not length raw_data then return 1; endif
+	endloop
+	return 0;
+    endfunction
+
+    loop
+	UpdatePlot WindowValues wkey;
+	local [val, trig] = WindowWait wkey;
+
+	if trig == 'panel' then
+	    if val.(trig) == 'Close' then break; endif
+
+	elseif trig == 'graph' then
+	    DrawSimulationGraph db_Filename mdb;
+
+	elseif trig == 'update' then
+	    opt.t_min = val.t_min;
+	    opt.t_max = val.t_max;
+	    opt.update = DoUpdate mdb;
+	    task_call [#AMBER_TI_Analyze, [db_Filename mdb, opt]];
+	    if opt.update then
+		if second task_fork [prio:1] == 'child' then
+		    sleep 0.05;
+		    AMBER_TI_AnalyzePanel [];
+		endif
+		exit[];
+	    endif
+
+	elseif trig == 'b_clear' then
+	    WindowSetData [wkey, tag [tok_cat ['b_', totok igen maxN],0]];
+
+	elseif trig == 'u_clear' then
+	    WindowSetData [wkey, tag [tok_cat ['u_', totok igen maxN],0]];
+	endif
+    endloop
+
+    db_Close mdb;
+    WindowDestroy wkey;
+    exit [];
+endfunction
+
+local function main arg
+#if 1
+    local prot =
+#	string
+	    heat { ps=1000 T=(10,300) r=1 }
+	    nvt { ps=100 T=300 }
+	    npt { ps=100 T=300 P=101 }
+	    min { ps=100 T=0 }
+#   ;
+    AMBER_Initialize ['traj/sim', prot, [verbose:1, deleteFiles:1]];
+#elseif 0
+    AMBER_TI_AnalyzePanel arg;
+#else
+    local lig = _Atoms 'lig';
+    local [lig_idx,lig_seg] = sac aMoleculeNumber lig;
+
+    AMBER_TI_Initialize [
+	'amber_ti'
+    ,	_Atoms 'rec'
+    ,	split [lig[lig_idx], lig_seg]
+    ,   [
+	    nlambda: 7
+	,   mm_gtest: 1000
+	]
+    ];
+
+    exit[];
+#endif
+endfunction
+
