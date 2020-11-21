@@ -1,0 +1,2931 @@
+#svl
+//	ligx_u.svl		Ligand Explorer Interface
+//
+//	17-sep-2020 (mk) improve ligand properties update check
+//	08-sep-2020 (kk) narrow protein terminus protection to protein N-term
+//	27-jul-2020 (mk) add residue color to QuickSurface color config options
+//	21-jul-2020 (na) keep optimizing other entries on error
+//	24-mar-2020 (mk) added SiteView toggle option
+//	21-jan-2020 (mk) utf-8 sweep
+//	03-dec-2019 (mk) added aSetLabelHidden
+//	23-aug-2019 (na) _LIGX_Options can return the standard settings
+//	21-aug-2019 (mk) improve tag duplicate graphics object handling
+//	17-jun-2019 (mk) add setting option to confirm QuickSurface replacement
+//	23-jun-2019 (mk) fix ligand properties update
+//	27-may-2019 (mk) retain rotation center of duplication
+//	15-apr-2019 (na) fixed reset restraints logic
+//	11-apr-2019 (na) reset restraints in a task turned back on (pl)
+//	29-mar-2019 (na) reset restraints compilation switch fixed
+//	16-nov-2018 (mk) added QuickSurface.clear_all to config
+//	29-oct-2018 (mk) atom label sweep
+//	22-oct-2018 (mk) add _LIGX_ConstrainLabel
+//	05-aug-2018 (mk) add System Manager popup constraints
+//	23-jun-2018 (mk,al) fix lig/sol tethering
+//	08-jun-2018 (al) adjust reporting messages
+//	30-apr-2018 (na) file was moved to calc.svl/ligx_u.svl
+//	25-apr-2018 (na) _LIGX_Prepare was moved to run/ligx_ui.svl
+//	26-mar-2018 (na) use task_call in lig props calculations for stability
+//	14-mar-2018 (na) clear destinations entries in _LIGX_ExecuteMDB
+//	27-feb-2018 (na) added _LIGX_ExecuteMDB mpu call to QuickPrep on an MDB
+//	05-feb-2018 (na) optimize properties monitor with SystemNonrenderState
+//	15-dec-2017 (jg) fix simulated radio-button behaviour
+//	05-dec-2017 (rb/mk) added tag duplicate
+//	09-nov-2017 (jg) improve Protonate3D protection in QuickPrep
+//	07-nov-2017 (na) single use for minimize ligand property display
+//	16-oct-2017 (al) bhelp on Buffer; remove reset restraints option
+//	17-sep-2017 (mk) fix _LIGX_Execute default options
+//	13-sep-2017 (jg) add option to reset restraints
+//	02-sep-2017 (mk) compress ligand/receptor sets
+//	30-aug-2017 (al) rename Duplicate to Ligand Duplicate
+//	03-aug-2017 (jg) extend capping options to termini
+//	02-jun-2017 (jg) add capping options to GUI
+//	16-sep-2016 (mk) change default of LigX.SiteView.ignoreInert
+//	15-sep-2016 (mk) add easier ligand duplicate for single ligand
+//	17-aug-2016 (mk) protein surface settings for Quicksurface config
+//	04-aug-2016 (mk) fix ligand duplication of multi-chain ligand
+//	03-feb-2016 (mk) split by cTagId
+//	14-jan-2016 (jg) use EHT descriptors in Ligand Properties
+//	11-nov-2015 (al) rename to QuickPrep
+//	11-sep-2015 (mk) beautify Ligand Property messages
+//	05-aug-2015 (mk) Improved Choose Ligand warning regarding active/inert
+//	24-jun-2015 (hf) use new Draw2DCTAB
+//	15-may-2015 (mk) Changed LigX_Prepare to not adjust H on inert groups
+//	10-sep-2014 (mk) Added LigX + SiteView settings
+//	02-sep-2014 (mk) allow lig+rec ligand in Choose Ligand
+//	22-jul-2014 (hf) more verbosity checking to _LIGX_Execute
+//	10-jul-2014 (hf) added verbose option to _LIGX_Execute
+//	07-jul-2014 (hf) Extracted callable _LIGX_Execute function
+//	13-may-2014 (cc) Added warning when fixing and not ligand present.
+//	03-apr-2014 (mk) Choose ligand strictly by tag
+//	02-jan-2014 (mk) retain partial inert state when duplicating ligand
+//	29-jun-2013 (cc) Add SiteView Config Option
+//	30-oct-2012 (cc) Extend atoms selection receptor to residue.
+//	26-oct-2012 (pl) allow receptor ligand
+//	24-oct-2012 (mk) Fix typo
+//	30-sep-2012 (cc) Add Structure Prep.
+//	29-jul-2012 (pl) hydrogens button logic here (addH included)
+//	06-jul-2012 (mk) added default receptor quick surface type
+//	11-jun-2012 (al) bubbleHelp typos
+//	24-apr-2012 (al) removed undo_Compare
+//	05-apr-2012 (pl) conf_Superpose returns *r*msd
+//	01-apr-2012 (pl) added UndoSnapshot
+//	10-mar-2012 (pl) new coloring modes: electrostatics(pb), lipo
+//	09-mar-2012 (pl) option to show hidden r-vectors
+//	13-jan-2012 (mk) move duplicated chains behind origin chains
+//	09-aug-2011 (cc) E_Dock now strips inert rec and sol molecules.
+//	23-dec-2010 (cc) LigX now uses GBVI/WSA scoring instead of LdG
+//	30-nov-2010 (pl) ignore inert ligands in londondg score
+//	03-nov-2010 (pl) warn in prepare if no receptor
+//	22-oct-2010 (pl) added configuration
+//	11-oct-2010 (pl) typos in bubblehelp
+//	08-oct-2010 (pl) fixed prepare behavior for unchecked H's
+//	16-sep-2010 (pl) adjusted constrain logic
+//	18-aug-2010 (pl) bug fixes
+//	01-aug-2010 (pl) added exit vectors, enchanced properties, restructred
+//	16-feb-2010 (al) import ReadPDB, ReadTriposMOL2, ReadMDLMOL
+//	30-sep-2009 (ac) fixed hydrogen stains in minimize
+//	19-mar-2009 (al) read custom menus after starting LigX
+//	12-jan-2009 (al) read std moe-menu before appending user's on LigX quit
+//	09-jan-2009 (al) restore menus: custom first then user
+//	11-dec-2008 (pl) don't dock score covalent ligands
+//	15-sep-2008 (al) fix loading of user menus
+//	05-sep-2008 (pl) use Protonate3D for H placement
+//	12-aug-2008 (ac) switched out view2d for a simple local window
+//	22-may-2008 (pl) added bubble help to settings panel
+//	19-mar-2008 (jd) read user menu file _LIGX_Quit
+//	28-aug-2007 (pl) fixed vowl in ligand minimize
+//	15-jun-2007 (pl) cleaned up and finalized
+//	10-may-2007 (pl) adapted from Emilio's QuickTools
+//	26-feb-2007 (ee) created
+//
+// COPYRIGHT (C) 2007-2020 CHEMICAL COMPUTING GROUP ULC ("CCG").
+// ALL RIGHTS RESERVED.
+//
+// PERMISSION TO USE, COPY, MODIFY AND DISTRIBUTE THIS SOFTWARE IS HEREBY
+// GRANTED PROVIDED THAT: (1) UNMODIFIED OR FUNCTIONALLY EQUIVALENT SOFTWARE
+// DERIVED FROM THIS SOFTWARE MUST CONTAIN THIS NOTICE; (2) ALL CODE DERIVED
+// FROM THIS SOFTWARE MUST ACKNOWLEDGE THE AUTHOR(S) AND INSTITUTION(S); (3)
+// THE NAMES OF THE AUTHOR(S) AND INSTITUTION(S) NOT BE USED IN ADVERTISING
+// OR PUBLICITY PERTAINING TO THIS SOFTWARE WITHOUT SPECIFIC WRITTEN PRIOR
+// PERMISSION; (4) ALL CODE DERIVED FROM THIS SOFTWARE BE EXECUTED WITH THE
+// MOLECULAR OPERATING ENVIRONMENT LICENSED FROM CCG.
+//
+// CCG DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
+// ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, AND IN NO EVENT
+// SHALL CCG BE LIABLE FOR ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR
+// ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER
+// IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
+// OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+//
+// TO DO:
+//	- prepare: better delete unbound waters
+//	- prepare: classify some waters as receptor
+//	- prepare: look for prosthetic groups and other small molecules
+//	- prepare: set ligand?
+//	- mm: optimize hydroxyls
+//	- mm: private system for speed
+
+#set title	'QuickPrep: Ligand Optimization'
+#set class	'MOE:interactive'
+#set version	'2020.09'
+
+function _Atoms;
+function EditDeleteConsequences;
+function EditDeleteAtoms;
+function EditCompressRLSSets;
+function OptionsWindow;
+function MM;
+function Protonate3D;
+function _StructurePreparation;
+function _aLabelTok, _aSetLabelTok;
+function cGKey;
+
+const PREFIX = 'LigX';				// object prefix string
+
+const LIGPROP_DVAR = tok_cat ['_', PREFIX, '_LIGAND_PROPERTIES_DVAR'];
+const LIGXMM_DVAR  = tok_cat ['_', PREFIX, '_LIGX_MM'];
+
+const ANDREWS_PKI = 0;			// use Andrews pKi
+
+function _LIGX_Save;				// forward
+function _LIGX_LigandProperties;		// forward
+function _LIGX_LigandPropertiesUpdate;		// forward
+function LigX_MM;				// forward
+
+global function _LIGX_SystemPanel [location, opt]
+    run ['ligx_obj.svl', [location,opt], '_LIGX_System'];
+endfunction
+
+global function _LIGX_SurfacePanel [location, opt]
+    run ['ligx_obj.svl', [location,opt], '_LIGX_Surface'];
+endfunction
+
+global function _LIGX_RVectors cmd
+    run ['ligx_vec.svl', cmd];
+endfunction
+
+global function _LIGX_Settings []
+    OptionsWindow 'QuickPrep';
+endfunction
+
+// ----------------------------- SETTINGS PANEL ------------------------------
+
+const LIGX_SETUP = [
+    b_StructurePrep		:  1,		// Prep using StructurePrep
+    b_StructurePrep_cap		:  0,		// cap breaks in StructurePrep
+    n_StructurePrep_loop	:  10,		// max length for built loops
+    n_StructurePrep_term	:  5,		// max length for built termini
+    b_Protonate3D		:  1,		// allow protonate3d
+    b_Protonate3D_flip		:  1,		// allow sidechain flips
+
+    b_tetherReceptor		:  1,		// tether receptor on prepare?
+    n_tetherReceptorStrength	: 10.0,		// force weight of tether
+    n_tetherReceptorFlat	:  0.25,	// flat bottom distance
+    b_tetherReceptorH		:  0,		// tether rec H's
+
+    b_tetherLigand		:  0,		// tether ligand on prepare?
+    n_tetherLigandStrength	: 10.0,		// force weight of tether
+    n_tetherLigandFlat		:  0.25,	// flat bottom distance
+    b_tetherLigandH		:  0,		// tether lig H's
+
+    b_tetherSolvent		: 0,		// tether solvent on prepare?
+    n_tetherSolventStrength	: 10.0,		// force weight of tether
+    n_tetherSolventFlat		:  0.25,	// flat bottom distance
+    b_tetherSolventH		:  0,		// tether sol H's
+    b_deleteSolvent		:  1,		// delete distant solvent
+
+    b_fixReceptorAtoms		:  1,		// fix atoms far away
+    b_freeReceptorH		:  1,		// free near receptor H's
+    n_flexibleReceptorCutoff	:  8.0,		// far definition
+
+    b_refineComplex		:  1,		// refine complex on prepare
+    n_refineRMSG		:  0.1,		// rms gradient
+    b_resetRestraints		:  0		// reset restraints when done
+];
+
+local function GetConfig param
+    if m_findmatch ['n_*', param] then
+	return add GetRCNumber [tok_cat[PREFIX,'.',param], LIGX_SETUP.(param)];
+    elseif m_findmatch ['b_*', param] then
+	return add GetRCBoolean [tok_cat[PREFIX,'.',param], LIGX_SETUP.(param)];
+    else
+	return token GetRC [tok_cat[PREFIX,'.',param], LIGX_SETUP.(param)];
+    endif
+endfunction
+
+// _LIGX_Options returns settings as defined by default + saved RC values. The
+// current design is ready for future implementation of named sets of settings.
+
+global function _LIGX_Options name
+    if name === 'std' then
+	return LIGX_SETUP;
+    else
+	// !!! Introduce named settings in an additional .settingsName in the
+	// RC (future). (i.e.: LigX.mySettings.b_resetRestraints)
+	return tag [tags LIGX_SETUP, apt GetConfig [tags LIGX_SETUP]];
+    endif
+endfunction
+
+// ------------------------------- CORE UTILITIES ---------------------------
+
+// Nearby calculates those atoms of set A that are near to some atom in
+// set B where "near" is a specified distance
+
+local function Nearby [Aatoms, Batoms, dist]
+    if not length Aatoms then return []; endif
+    if not length Batoms then return zero Aatoms; endif
+    if CellEnable [] then return one Aatoms; endif
+
+    local i, prox;
+    local nmask = zero Aatoms;
+    const PACKET = 100;
+
+    if length Aatoms > length Batoms then
+	prox = prox_open [dist, aPos Aatoms, dist];
+	for i in split [x_id Batoms, PACKET] loop
+	    nmask[second prox_find [prox, aPos Batoms[i], 0]] = 1;
+	endloop
+	prox_close prox;
+    else
+	prox = prox_open [dist, aPos Batoms, dist];
+	for i in split [x_id Aatoms, PACKET] loop
+	    nmask[i] = notnot first prox_find [prox, aPos Aatoms[i], 0];
+	endloop
+	prox_close prox;
+    endif
+
+    return nmask;
+endfunction
+
+// PrepareSystem is used to identify the system components: receptor,
+// solvent and ligand.  If there is more than one component for the
+// ligand, we strip out cofactors.
+// !!! DECIDE THIS
+
+const COFACTOR_RESNAME = [
+    '142', '6FA', 'ACO', 'ADJ', 'ADP', 'AMP', 'ASC', 'ATP', 'B12', 'BH4',
+    'BHS', 'BIO', 'BTN', 'CAO', 'CFM', 'CFN', 'CLF', 'CN1', 'CNB', 'CNF',
+    'COA', 'COP', 'COY', 'COZ', 'CSW', 'CUB', 'CUM', 'CUO', 'DAH', 'DHE',
+    'DPM', 'EHP', 'F3S', 'F42', 'FAD', 'FAE', 'FES', 'FMN', 'FOL', 'FON',
+    'FS1', 'FS2', 'FS3', 'FSO', 'GDP', 'GDS', 'GMP', 'GSH', 'GTP', 'GTT',
+    'H4B', 'HAS', 'HBL', 'HEA', 'HEB', 'HEC', 'HEM', 'HEO', 'HHP', 'INF',
+    'ING', 'LPA', 'NAD', 'NAH', 'NAJ', 'NAP', 'NDP', 'NEO', 'NFS', 'NIO',
+    'OMO', 'PAU', 'PEO', 'PEP', 'PLP', 'POP', 'PPR', 'PPV', 'PQN', 'PRL',
+    'RBF', 'RED', 'RTL', 'SCA', 'SF3', 'SF4', 'SPV', 'SRM', 'TDP', 'TPP',
+    'TPS', 'U10',  'UQ', 'UQ1', 'UQ2', 'VDX', 'VIB', 'VIT', 'WCC', 'NAG',
+    'MAN'
+];
+
+// !!! WHAT ABOUT INERT ATOMS - MULTIPLE LIGANDS - WHERE TO DO THIS TEST
+
+local function PrepareSystem chains
+    local rec, sol, lig;
+
+#if 1
+    if not length chains then chains = Chains[]; endif
+    local atoms = cat cAtoms chains;
+    rec = atoms | aClassRLS atoms == 'rec';
+    sol = atoms | orE eqE [ [aClassRLS atoms], ['sol','unk'] ];
+    lig = atoms | aClassRLS atoms == 'lig';
+
+#else
+    if isnull chains then
+	rec = _Atoms '$$receptor';
+	sol = _Atoms '$$solvent';
+	lig = Atoms[];
+	lig = lig | not indexof [lig, rec];
+	lig = lig | not indexof [lig, sol];
+    else
+	local atoms = cat cAtoms chains;
+	rec = atoms | aClassRLS atoms == 'rec';
+	sol = atoms | orE eqE [ [aClassRLS atoms], ['sol','unk'] ];
+	lig = atoms | aClassRLS atoms == 'lig';
+    endif
+
+    local dum = (aAtomicNumber lig == 0 and aBondCount lig == 0);
+
+    if orE dum and add dum < length lig then
+	sol = cat [sol, lig|dum];
+	lig = lig | not dum;
+    endif
+
+    local slig = cat oAtoms oGetCollection 'LIGX_LIGAND';
+    if length slig then
+	local lig0 = lig;
+	local [idx, mask] = sam aMoleculeNumber lig;
+	lig = split [lig[idx], mtoc mask];
+
+	local Lmask = s_add [indexof [cat lig, slig], app length lig];
+
+	if not andE Lmask then
+	    rec = cat append [lig | not Lmask, rec];
+	    lig = cat (lig | Lmask);
+	elseif length lig then
+	    lig = cat lig;
+	endif
+
+	if length lig then
+	    return [rec,sol,lig];
+	endif
+	lig = lig0;
+    endif
+
+    if length uniq aMoleculeNumber lig > 1 then
+	local cof = lig | indexof [rName oParent lig, COFACTOR_RESNAME];
+	if length cof < length lig then
+	    lig = diff [lig, cof];
+	    rec = cat [rec, cof];
+	    if orE (rName oParent lig == 'INH') then	// look for INH
+		local inh = uniq oParent lig;
+		inh = inh | rName inh == 'INH';
+		inh = cat rAtoms inh;
+		inh = lig | indexof [oParent lig, uniq oParent inh];
+		rec = cat [rec, diff [lig,inh]];
+		lig = inh;
+	    endif
+	endif
+    endif
+#endif
+
+    rec = rec[x_sort aNumber rec];
+    lig = lig[x_sort aNumber lig];
+    sol = sol[x_sort aNumber sol];
+
+    return [rec, sol, lig];
+endfunction
+
+// GetGroups returns then [rec,lig,sol] sets for each active group
+// in the system (non-laminated).
+
+local function GetGroups []
+    function IsActive atoms = not andE (
+	   aInert atoms
+	or (not aAtomicNumber atoms and not aBondCount atoms)
+    );
+
+    local chains = Chains[];			// collect by cTag
+    chains = chains | not m_findmatch ['[[]PRIVATE]*', cName chains];
+
+    local [idx,seg] = sac cTagId chains;
+    chains = chains[idx];
+
+    local mask = app IsActive cAtoms chains;	// strip inert
+    chains = (chains | mask);
+    seg = s_add [mask, seg];
+    chains = split [chains, seg];
+    chains = chains | app length chains;
+
+    return app PrepareSystem chains;		// [...,[rec,sol,lig],...]
+endfunction
+global function __LIGX_GetGroups [] = GetGroups [];
+
+// ----------------------------- ACTION BUTTONS -----------------------------
+
+function Draw2DCTAB;
+
+// _LIGX_Ligand2D isolates the ligand and pops up a 2D sketch of the ligand
+
+global function _LIGX_Ligand2D []
+    local [rec,sol,lig] = PrepareSystem [];
+
+    if isnull lig then
+	Warning 'No ligands detected.';
+	return;
+    endif
+
+#   if 0
+    _LIGX_ActiveSite 1;				// line mode only
+#   endif
+
+    if second task_fork [master: 'none'] <> 'child' then return; endif
+
+    local ctab = ctab_Extract [lig, [heavy: 1, aro: 0]];
+//    local dropt = [fontsize: 0.85, colorcode: 1, padding: 30];
+    local dropt = [coords: '*', atomcolor: -2, padding: 30];
+    local grkey = first Draw2DCTAB [0, ctab, dropt];
+
+    local wkey = WindowKey 'ligx_LigMol';
+    if not wkey then
+	wkey = WindowCreate [
+	    title: 'Ligand Molecule',
+	    windowName: 'ligx_LigMol',
+	    Label: [
+		name: 'picture', extendH: 1, extendV: 1,
+		graphics: grkey, background: 'white'
+	    ],
+	    text: 'Close'
+	];
+    else
+	WindowSetAttr [wkey, [picture: [graphics: grkey]]];
+    endif
+    gr_destroy grkey;
+    WindowShow [wkey, 1];
+    WindowWait wkey;
+    WindowDestroy wkey;
+    exit [];
+endfunction
+
+// _LIGX_SelectLigand identifies a ligand molecule to be used as the
+// main focus of attention.
+
+global function _LIGX_SelectLigand []
+
+    const DISALLOW_MIXED_LIG = 0;   // 1: if mixed lig/rec ligand is not allowed
+    const COMPRESS_LIG_SET   = 1;   // 1: Compress ligand/receptor set
+
+    task_settitle [-1, 'Select Ligand'];
+    const RECSET = 'Receptor', LIGSET = 'Ligand';
+
+    UndoSnapshot [];
+
+    local old_prio = task_prio 0;
+    local recset = oGetCollection RECSET;
+    local ligset = oGetCollection LIGSET;
+
+    oSetCollection [RECSET, []];		// unset overrides
+    oSetCollection [LIGSET, []];
+
+    local group = GetGroups [];			// [...[rec,sol,lig]...]
+    local all_lig = app third group;		// lig
+
+    local lig = rep [[], length all_lig];	// selected ligands
+    local i, mask;
+
+    for i = 1, length all_lig loop
+	local comp = graph_ccomponent_list BondGraph all_lig(i);
+	comp = apt get [all_lig[i], comp];
+
+	mask = app orE aSelected comp;		// ligands first
+	if orE mask then
+	    lig(i) = cat (comp | mask);
+	    all_lig(i) = cat [
+		cat (comp | not mask),		// unselected lig
+		group(i)(1)			// rec
+	    ];
+#if DISALLOW_MIXED_LIG
+	    continue;
+#endif
+	endif
+
+	mask = aSelected group(i)(1);		// then receptor
+	if orE mask then
+	    lig(i) = cat [
+		lig(i),				// combine sel lig and sel rec
+		cat rAtoms uniq aResidue (group(i)(1) | mask)
+	    ];
+	    all_lig(i) = cat [
+		group(i)(1) | not mask,		// unselected rec
+		group(i)(3)			// lig
+	    ];
+	    all_lig(i) = diff [all_lig(i), lig(i)];	// remove chosen lig
+	endif
+
+	    // If no ligand was chosen in this tag, ignore it.
+	    // I.e. do not make any receptor set changes to
+	    // this tag. This prevents ligands in this tag to
+	    // be included in the receptor set when only a
+	    // ligand from another tag was selected.
+
+	if isnull lig(i) then all_lig(i) = []; endif
+    endloop
+
+    oSetCollection [RECSET, recset];		// reset previous sets
+    oSetCollection [LIGSET, ligset];
+
+    if not orE app length lig then
+	Warning 'No active ligand atoms selected.\n\n'
+		'Select one or more atoms of active\n'
+		'ligands and then issue Choose Ligand\n'
+		'to operate on the selected molecules.'
+	;
+	task_prio old_prio;
+	return;
+    endif
+
+    lig = cat cat lig;			// newly selected ligand from old recset
+    recset = diff [recset, cat [lig, aResidue lig, aChain lig]];
+
+    all_lig = cat cat all_lig;		//remove all_lig (a,r,c) from old recset
+    recset = diff [recset, cat [all_lig, aResidue all_lig, aChain all_lig]];
+    recset = uniq cat [recset, uniq aResidue all_lig];	// add current all_lig r
+
+    local ra = cat oAtoms recset;	// remove recset (a,r,c) from old ligset
+    ligset = diff [ ligset, cat [ra, uniq aResidue ra, uniq aChain ra] ];
+
+    oSetCollection [RECSET, recset];
+    oSetCollection [LIGSET, ligset];
+
+	// If lig includes non-lig atoms add them to ligset.
+
+    if orE (aClassRLS lig <> 'lig') then
+	oSetCollection ['Ligand', ligset = uniq cat [
+	    oGetCollection 'Ligand', lig | aClassRLS lig <> 'lig'
+	]];
+    endif
+
+#if COMPRESS_LIG_SET	// Compress ligand and receptor set with expression.
+    EditCompressRLSSets [];
+#endif
+
+    task_prio old_prio;
+endfunction
+
+// _LIGX_ConstrainRender displays the status of the constrains by modifying
+// the look of the atoms
+
+global function _LIGX_ConstrainRender []
+    UndoSnapshot [];
+
+    local atoms = cat PrepareSystem [];
+    atoms = atoms | not aHidden atoms;
+
+    local a_fixed = atoms | aFixed atoms;
+    local a_tethered = diff [atoms | (aTether atoms)(2) > 0, a_fixed];
+    local a_free = diff [atoms, cat [a_tethered, a_fixed]];
+
+    local b = select ['cylinder', 'line', aClassRLS atoms == 'lig'];
+
+    aSetNucleusLook [a_free,	 'small-sphere'	];
+    aSetBondLook    [
+	a_free,
+	select ['cylinder', 'line', aClassRLS a_free == 'lig']
+    ];
+    aSetNucleusLook [a_tethered, 'point'	];
+    aSetBondLook    [a_tethered, 'line'		];
+    aSetNucleusLook [a_fixed,	 'point'	];
+    aSetBondLook    [a_fixed,	 'line'		];
+endfunction
+
+// _LIGX_ConstrainLabel toggle display of fixed,inert,tethered,walled
+// atom labels.
+
+global function _LIGX_ConstrainLabel []
+    const LTOK = '{aConstraint}';
+    UndoSnapshot [];
+    local atoms = cat PrepareSystem [];
+    local flag  = anyfalse _aLabelTok [atoms, LTOK];
+    _aSetLabelTok [atoms, LTOK, flag];
+    if flag then aSetLabelHidden [atoms, 0]; endif
+endfunction
+
+// _LIGX_Constrain handles the constraint menu.  Accept a token to
+// indicate what to do.
+
+global function _LIGX_Constrain what
+    task_settitle [-1, ''];
+    UndoSnapshot [];
+    what = token what;
+
+    local tenv = task_getenv [];
+    local atoms = [];
+
+    if isscalarnum tenv.SYSMAN_LINENO then
+	local line = tenv.SYSMAN_LINENO;
+	local sysman_info = SystemManager [];
+	local okeys   = sysman_info(1);
+	local sysline = sysman_info(10);
+	sysman_info = [];
+
+	if line then
+	    okeys = okeys(line);
+	else
+	    okeys = cat (okeys | sysline);
+	endif
+	atoms = cat oAtoms (okeys | oValid okeys);
+    else
+	atoms = SelectedAtoms[];
+    endif
+
+    if not length atoms then
+	Warning	'No atoms are selected.\n\n'
+		'Select one or more atoms and then choose\n'
+		'one of the Constrain options.'
+	;
+	return;
+    endif
+
+    if what == 'fixed' then
+	aSetFixed [atoms, 1];
+
+    elseif what == 'unfixed' then
+	aSetFixed [atoms, 0];
+
+    elseif what == 'free' then
+	aSetFixed [atoms, 0];
+	aSetTether [atoms, [0,0,0], 0, 0, 0];
+
+    elseif what == 'tethered' then
+	local rls = aClassRLS atoms;
+	local rec = atoms | rls == 'rec';
+	local lig = atoms | rls == 'lig';
+	local sol = diff [atoms, cat [rec,lig]];
+
+	local tweight = GetConfig'n_tetherLigandStrength';
+	local tflatbt = GetConfig'n_tetherLigandFlat';
+
+	aSetFixed [lig, 0];
+	aSetTether [lig, aPos lig, tweight, 0, tflatbt];
+
+	tweight = GetConfig'n_tetherSolventStrength';
+	tflatbt = GetConfig'n_tetherSolventFlat';
+
+	aSetFixed [sol, 0];
+	aSetTether [sol, aPos sol, tweight, 0, tflatbt];
+
+	tweight = GetConfig'n_tetherReceptorStrength';
+	tflatbt = GetConfig'n_tetherReceptorFlat';
+
+	aSetFixed [rec, 0];
+	aSetTether [rec, aPos rec, tweight, 0, tflatbt];
+    endif
+endfunction
+
+global function _LIGX_Hydrogens []		// cycle hydrogens
+    local old_prio = task_prio 0;
+    local cmd = 'show';
+
+    const ALL_H   = SMARTS '[#0,#1;D1Q1]';
+    const POLAR_H = SMARTS '[#0,#1;D1Q1][#X]';
+
+	// Get all hydrogens.  If there is a selection, the retain only
+	// the hydrogens in the selection set's light hydrogens.
+
+    local atoms = Atoms[];
+    local mask;
+
+    if nSelectedAtoms [] then
+	atoms = atoms | aSelected atoms;
+	local nbr = aBonds atoms;
+	atoms = uniq cat prepend [nbr || aIsLight nbr, atoms];
+    endif
+
+    if orE (mask = aExplicitHCount atoms <> aHCount atoms) then
+	atoms = atoms | mask;
+	cmd = 'addH';
+    else
+	atoms = atoms | aAtomicNumber atoms <= 1;
+	atoms = atoms | not app andE aHidden aBonds atoms;
+	if orE (mask = sm_Match [POLAR_H, atoms] and aHidden atoms) then
+	    atoms = atoms | mask;
+	elseif not orE aHidden atoms then
+	    cmd = 'hide';
+	endif
+    endif
+
+	// perform the opertaion (hide/show)
+
+    if length atoms then
+	UndoSnapshot [];
+	if     cmd == 'hide' then aSetHidden [atoms, 1];
+	elseif cmd == 'show' then aSetHidden [atoms, 0];
+	elseif cmd == 'addH' then
+	    local deltaH = aHCount atoms - aExplicitHCount atoms;
+	    Add_H atoms;
+	    local msg = Message [0, twrite [
+		'Hydrogens added: {n:.9g}; deleted: {n:.9g}.'
+		'\nUse Protonate3D to optimize hydrogen placement.'
+	    ,   add maxE [0, deltaH]
+	    ,	add maxE [0, -deltaH]
+	    ]];
+	    sleep 5;
+	    Message [msg, []];
+	endif
+    endif
+
+    task_prio old_prio;
+endfunction
+
+// -------------------------------- PREPARE ----------------------------------
+
+// Special version of pot_FinalizeModel, which adjust hydrogens only
+// on the group atoms (ignoring inert groups).
+// This version needs to be adjusted whenever pot_FinalizeModel changes.
+
+local function ligx_FinalizeModel []
+
+	// This is the adjusted code of pot_AdjustValence[]:
+
+    function del [atoms, el]
+	local b = cat aBonds atoms;
+	oDestroy (b | aElement b == el);
+    endfunction
+
+    local atoms = cat cat GetGroups [];
+    local lp = pot_Parm_lp atoms;
+    Add_HLP (atoms | lp  ); del [atoms | not lp, 'LP'];
+
+    atoms = cat cat GetGroups [];
+    local uh = pot_Parm_uh atoms;
+    Add_H (atoms | not uh); del [atoms | uh, 'H'];
+
+	// pot_SetCharges sets charges for ALL atoms, not just the groups.
+	// This can not be helped (without rewriting all charging
+	// functions). Just be aware of this little asymmetry.
+
+    pot_SetCharges[];
+endfunction
+
+// Carries out the actual LIGX operations as specified in opt vector from
+// LIGX panel or elsewhere.
+
+global function _LIGX_Execute opt
+    if isnull opt.verbose then
+	opt.verbose = 1;
+    endif
+
+    opt = tagcat [opt, _LIGX_Options []];
+
+	// Protonate the active system(s) according to the options.
+	// Skip the protonation if there is no receptor.
+
+    local i, atoms, rec, sol, lig;
+    local msg = 0;
+    local groups = GetGroups [];
+
+    for i = 1, length groups loop
+	if opt.verbose then
+	    msg = Message [
+		msg, twrite [
+		    'QuickPrep: Correcting Structure: System {} of {} ...',
+		    i, length groups
+		]
+	    ];
+	endif
+
+	atoms = cat groups(i);
+
+	if opt.b_deleteSolvent then
+	    local wat = groups(i)(2) | sm_Match ['[OH2Q0+0]', groups(i)(2)];
+	    wat = wat | not Nearby [wat, cat groups(i)[[1,3]], 4.5];
+	    wat = uniq cat append [aBonds wat, wat];
+	    local [d_chains, d_res] = EditDeleteConsequences wat;
+	    EditDeleteAtoms wat;
+	    oDestroy [d_chains, d_res];
+	    EditCompressRLSSets [];
+	    atoms = atoms | oType atoms == 'atom';
+	endif
+
+	atoms = atoms | not aIsLight atoms;
+
+	if opt.b_StructurePrep then
+	    local ch = uniq cat aChain atoms;
+	    local sprep_opts = [
+		batch_protonate3d : 0,
+		max_term  : inc opt.n_StructurePrep_term,
+		max_loop  : inc opt.n_StructurePrep_loop,
+		cap_ends  : opt.b_StructurePrep_cap
+	    ];
+	    if opt.verbose then  _StructurePreparation [ch, sprep_opts];
+	    else		(_StructurePreparation [ch, sprep_opts]);
+	    endif
+	endif
+    endloop
+
+    groups = GetGroups [];		// to deal with hydrogen changes
+
+    for i = 1, length groups loop
+	if opt.verbose then
+	    msg = Message [
+		msg, twrite [
+		    'QuickPrep: Prepare: Protonating system {} of {} ...',
+		    i, length groups
+		]
+	    ];
+	endif
+
+	atoms = cat groups(i);
+	atoms = atoms | not aIsLight atoms;
+
+	if opt.b_Protonate3D then
+	    local flip = [];
+	    if opt.'b_Protonate3D_flip' then flip = atoms; endif
+
+		// Protect N-terminus. Protonate3D tends to neutralize
+		// the N-terminal N in proteins. Pending development of
+		// options for N-term treatment in Protonate3D itself,
+		// we protect its current state.
+
+	    local prot = atoms | andE [
+		aBackbone atoms,
+		1 == rNumber oParent atoms,
+		aName atoms == 'N',
+		aClassRLS atoms == 'rec',
+		1 == aHeavyValence atoms
+	    ];
+
+		// Also include pre-existing Protonate3D GUI settings (if any).
+
+	    prot = uniq cat [prot, oAtoms oGetCollection 'Protonate3d_Protect'];
+	    Protonate3D [ atoms, atoms, flip, prot, [], [verbose: opt.verbose]];
+	else
+	    Add_H atoms;
+	endif
+    endloop
+
+    if opt.b_StructurePrep or opt.b_Protonate3D then
+	ligx_FinalizeModel [];	// !!! was pot_FinalizeModel
+    endif
+
+    groups = GetGroups [];		// to deal with hydrogen changes
+
+	// Compute tethers to all of the atoms according to the options
+
+    [rec,sol,lig] = apt cat groups;
+    local tatoms = [], tweight = [], tflatbt = [];
+    if opt.b_tetherReceptor then
+	[tatoms, tweight, tflatbt] = apt cat [[tatoms, tweight, tflatbt],
+	    uext1 [rec | opt.b_tetherReceptorH or not aIsLight rec,
+	    opt.n_tetherReceptorStrength, opt.n_tetherReceptorFlat]
+	];
+    endif
+    if opt.b_tetherLigand then
+	[tatoms, tweight, tflatbt] = apt cat [[tatoms, tweight, tflatbt],
+	    uext1 [lig | opt.b_tetherLigandH or not aIsLight lig,
+	    opt.n_tetherLigandStrength, opt.n_tetherLigandFlat]
+	];
+    endif
+    if opt.b_tetherSolvent then
+	[tatoms, tweight, tflatbt] = apt cat [[tatoms, tweight, tflatbt],
+	    uext1 [ sol | opt.b_tetherSolventH or not aIsLight sol,
+	    opt.n_tetherSolventStrength, opt.n_tetherSolventFlat]
+	];
+    endif
+    local a_tethers = aTether Atoms[];
+    i = aNumber tatoms;
+    a_tethers(1) = apt put [a_tethers(1), [i], aPos tatoms];
+    a_tethers(2) = put [a_tethers(2), i, tweight];
+    a_tethers(3) = put [a_tethers(3), i, 0];
+    a_tethers(4) = put [a_tethers(4), i, tflatbt];
+
+	// Fix any desired atoms relative to the ligands within
+	// each group of [rec,sol,lig]
+
+    local flexCutoff = max [0, min [100, opt.n_flexibleReceptorCutoff]];
+    local mask, fmask = [], fatoms = [];
+
+    if opt.b_fixReceptorAtoms and flexCutoff < 100 then
+	fatoms = rep[[], length groups];
+	fmask = fatoms;
+	for i in x_id groups loop
+	    [rec,sol,lig] = groups(i);
+	    atoms = cat [rec, sol];
+
+	    if flexCutoff <= 0 then mask = one atoms;
+	    else		    mask = not Nearby [atoms, lig, flexCutoff];
+	    endif
+
+	    if opt.b_freeReceptorH then
+		mask = mask and not (
+		    Nearby [atoms, lig, 6.0] and aAtomicNumber atoms <= 1
+		);
+	    endif
+	    fatoms(i) = atoms;
+	    fmask(i) = mask;
+	endloop
+	fatoms = cat fatoms | cat fmask;
+    endif
+
+    if opt.b_refineComplex then
+	local topoState = SystemTopologyState[];
+	for i = 1, length groups loop
+	    atoms = cat groups(i);
+	    if opt.verbose then
+		msg = Message [msg, twrite [
+		    'QuickPrep: Energy minimization {} of {} ...\n',
+		    i, length groups
+		]];
+	    endif
+	    LigX_MM tagcat [[
+		    aInert: m_diff  [Atoms[], atoms],
+		    aFixed: indexof [Atoms[], fatoms],
+		    aTether: a_tethers,
+		    verbose: opt.verbose,
+		    pot_finalize : 0,
+		    pot_charge : 0,
+		    gtest: opt.gtest
+		],[
+		    gtest: opt.n_refineRMSG
+	    ]];
+	    if SystemTopologyState[] <> topoState then break; endif
+	endloop
+    endif
+
+	// Add the extra restraints in the output system.
+
+    if not opt.b_resetRestraints then
+	aSetFixed [fatoms, 1];
+	aSetTether prepend [a_tethers, Atoms[]];
+    endif
+
+    Message [msg, []];
+endfunction
+
+// _LIGX_ExecuteMol takes a "mol" or "moe" type entry and a _LIGX_Execute
+// options vector and returns a QuickPrep version of the molecule.
+
+global function _LIGX_ExecuteMol [molecule, opt]
+    local sys = SystemPush [];
+    if moe_IsMOE molecule then
+	local [chains, gobj, mopt] = _moe_Create [molecule, []];
+	_LIGX_Execute opt;
+	molecule = _moe_Extract [Chains[], gobj, [mol_name: mopt.mol_name]];
+	GDestroy gobj;
+    else
+	mol_Create molecule;
+	_LIGX_Execute opt;
+	molecule = mol_Extract Chains [];
+    endif
+    SystemPop sys;
+    return molecule;
+endfunction
+
+// WriteVectorToString output any vector to a human readable format.
+// This function will write out vectors up to a customizable level of nesting
+// (maxDepth option) to a string with SVL-like brackets and indenting.
+//
+// Both scalar and tagged vectors can be limited to a maximum number of entries
+// to avoid overly long print outputs with the maxVectorLength and
+// maxTaggedLength options.
+//
+// The order of the if / elseif / else statements is important.
+
+local function WriteVectorToString [args, depth, opt]
+    const INDENT_N = 4;
+    const MAX_WIDTH = 80;
+    const INDENT = cat rep [" ", INDENT_N];
+    const DEFAULTS = [
+	maxVectorLength: 32,
+	maxTaggedLength: 64,
+	compact: 0,
+	maxDepth: 5
+    ];
+    opt = tagcat [opt, DEFAULTS];
+    if isnull depth then depth = 0; endif
+    local spaces = cat rep [INDENT, depth];
+    local output = "";
+
+    local a, rhs;
+    local i = 1;
+    local line = "";
+    local format = '{}';
+
+	// Process null
+
+    if isnull args then
+	output = cat [spaces, "[],\n"];
+
+	// Process tagged vectors
+
+    elseif istagged args then
+	if inc depth > opt.maxDepth then
+	    return cat [spaces, "[tagged],\n"];
+	endif
+
+	output = cat [output, spaces, "[\n"];
+	for a in args loop
+	    if i > opt.maxTaggedLength then
+		print 'max tagged length';
+		output = cat [output, INDENT, spaces, "...,\n"];
+		break;
+	    endif
+	    rhs = WriteVectorToString [a(2), inc depth];
+	    rhs = drop [rhs, INDENT_N * inc depth];
+	    output = cat [output, INDENT, spaces, string a(1), ": ", rhs];
+	    i = inc i;
+	endloop
+	output = cat [drop [output, -2], "\n", spaces, "],\n"];
+
+	// Process flat strings
+
+    elseif isflatchar args then
+	output = cat [spaces, "\"", args, "\",\n"];
+
+	// Process vectors (non-strings)
+
+    elseif length args > 1 then
+	if inc depth > opt.maxDepth then
+	    return cat [spaces, "[...],\n"];
+	endif
+
+	line = cat [INDENT, spaces];
+	output = cat [output, spaces, "[\n"];
+	for a in args loop
+
+		// This breaks out for overly long vectors
+
+	    if i > opt.maxVectorLength then
+		print 'max vector length';
+		if istrue opt.compact then
+		    line [length line] = "\n";
+		    line = cat [line, INDENT, spaces, "...,\n"];
+		else
+		    output = cat [output, INDENT, spaces, "...,\n"];
+		endif
+		break;
+	    endif
+
+		// Print out scalars, recurse for vectors
+
+	    if isscalartok args then
+		rhs = cat [INDENT, spaces, swrite ['\'{}\'', args], ",\n"];
+	    elseif isscalarnum args then
+		if args == round args then
+		    rhs = cat [INDENT, spaces, swrite ['{n:f.0}', args], ",\n"];
+		else
+		    rhs = cat [INDENT, spaces, swrite ['{n:g}', args], ",\n"];
+		endif
+	    else
+		rhs = WriteVectorToString [a, inc depth];
+		rhs = drop [rhs, INDENT_N * inc depth];
+	    endif
+
+		// Compact format with wrap or one entry per line
+
+	    if istrue opt.compact then
+		rhs [length rhs] = " ";
+		if length line + length rhs - 1 > MAX_WIDTH then
+		    line [length line] = "\n";
+		    output = cat [output, line];
+		    line = cat [INDENT, spaces];
+		endif
+		line = cat [line, rhs];
+	    else
+		output = cat [output, INDENT, spaces, rhs];
+	    endif
+
+	    i = inc i;
+	endloop
+
+	if istrue opt.compact then
+	    output = cat [output, line];
+	endif
+	output = cat [drop [output, -2], "\n", spaces, "],\n"];
+
+	// Scalar
+
+    else
+	if isscalartok args then
+	    output = cat [spaces, swrite ['\'{}\'', args], ",\n"];
+
+	elseif isscalarnum args then
+	    if args == round args then
+		output = cat [spaces, swrite ['{n:f.0}', args], ",\n"];
+	    else
+		output = cat [spaces, swrite ['{n:g}', args], ",\n"];
+	    endif
+	endif
+    endif
+
+    if depth == 0 then output = cat [drop [output, -2], "\n"]; endif
+
+    return output;
+endfunction
+
+// _LIGX_ExecuteMDB takes an mdb file and reads the molecule type in_field,
+// runs QuickPrep on the molecule and saves the molecule type result in the
+// out_field. MOE's current QuickPrep settings are used.
+//
+// If no destination field is specified the data will be written in-place, thus
+// destroying previous data.
+//
+// If the mdb field is left empty or '', MOE will prompt the user to choose an
+// open database from the DBV.
+//
+// When running on the selected entries, the selection is stored when the
+// command is launched initially, subsequent changes to the selection will not
+// affect the current run.
+//
+// The process monitors the current state of the destination field being empty
+// or not just before running QuickPrep on the entry.
+
+global function _LIGX_ExecuteMDB [mdb, sourceField, destinationField, opt]
+    const DEFAULT_LIGX_MDB = [
+	verbose: 0,	    // additional print statements
+	selectedEntries: 0, // run only on selected entries (in the chosen DBV)
+	emptyOutput: 0,	    // run only on entries where the output is empty
+	entryList: [],	    // run on a predefined entry list
+	noMPU: 0,	    // override: don't use mpu
+	ligxOpt: [verbose: 0] // options to pass to QuickPrep.
+    ];
+
+    local silentMode = not call [];	// return value is used, suppress output
+    local verbose = istrue opt.verbose;	// print extra info
+    local startTime = clock [];
+
+    opt = tagcat [opt , DEFAULT_LIGX_MDB];
+
+	// Print the function arguments to the CLI in verbose mode
+
+    if not silentMode or verbose then
+	local vnum = MOE_VERSION;
+	local vtok = twrite [
+	    select ['{n:.4f}', '{n:.2f}', mod [100 * vnum, 1]],
+	    vnum
+	];
+	write [ '\nQuickPrep ({n:.2f}) started {}\n', vtok, asctime []];
+	write ['_LIGX_ExecuteMDB {}', token WriteVectorToString [argument []]];
+    endif
+
+	// Database validation and check.
+	//	mdb: database key or MDB filename.
+	//
+	// if mdb is '' or [] then the user will be prompted to choose a
+	// database already open in a DBV, or, if none, to open in a DBV.
+
+    if isfalse mdb then mdb = db_View []; endif
+    local dbKey = db_Open [mdb, 'read-write'];
+    local filename = fenvname db_Filename dbKey;
+
+	// Database field validation of names and types.
+
+    if isnull sourceField then
+	task_error '_LIGX_ExecuteMDB: The source field name is required.';
+    endif
+    if not isscalartok sourceField then
+	task_error '_LIGX_ExecuteMDB: The source field name must be a token.';
+    endif
+
+	// Write field defaults to sourceField if none is specified.
+
+    if isfalse destinationField then destinationField = sourceField; endif
+    if not isscalartok destinationField then
+	task_error '_LIGX_ExecuteMDB: The destination field name'
+		   ' must be a token.';
+    endif
+
+	// Make sure that the input is either a MOE or a mol field.
+
+    local sourceType = first db_FieldType [dbKey, sourceField];
+    if allfalse [m_join [sourceType,  ['moe', 'molecule']]] then
+	task_error [
+	    '_LIGX_ExecuteMDB: The source field type must be either mol or MOE.'
+	];
+    endif
+
+    local writeType = first db_FieldType [dbKey, destinationField];
+    if notnull writeType then if writeType <> sourceType then
+	task_error [ twrite [
+	    '_LIGX_ExecuteMDB: The destination field type must be ({}).',
+	    sourceType
+	]];
+    endif endif
+    db_EnsureField [dbKey, destinationField, sourceType];
+
+	// If there is a selection in the DBV and the option selectedEntries is
+	// true, then use the current selection in the DBV throughout the
+	// processing. DO NOT check for the selected state of entries on the
+	// fly.
+	//
+	// If the function is called with the entryList option it prevails
+	// and the selectedEntries flag is disregarded.
+	//
+	// In all other cases, use db_NextEntry.
+
+    local nEntries;
+    local noList = 0;
+    if isnull opt.entryList then
+	if istrue opt.selectedEntries then
+	    opt.entryList = dbv_SelectedEntries dbKey;
+	    nEntries = length opt.entryList;
+	else
+	    noList = 1;
+	    nEntries = db_nEntries dbKey;
+	endif
+    else
+	nEntries = length opt.entryList;
+    endif
+
+	// Clear out destination entries if not writing to input and if not
+	// skipping non-empty entries
+
+    if isfalse opt.emptyOutput and destinationField <> sourceField then
+	local delEnt = 0;
+	local delVal;
+	if istrue sourceType == 'moe' then
+	    delVal = tag [destinationField, nest _moe_Extract []];
+	else
+	    delVal = tag [destinationField, nest mol_Extract []];
+	endif
+	if noList then
+	    while delEnt = db_NextEntry [mdb, delEnt] loop
+		db_Write [mdb, delEnt, delVal];
+	    endloop
+	else
+	    for delEnt in opt.entryList loop
+		db_Write [mdb, delEnt, delVal];
+	    endloop
+	endif
+    endif
+
+	// UpdateMessage uses the scope variables progress, nEntries, filename
+	// and msgKey to display a progress message and a progress bar.
+	//
+	// The progress bars uses differents markers:
+	//		'|' is for success
+	//		'-' is for skipped
+	//		'*' is for errors.
+
+    local msgKey = Message [0, twrite ['QuickPrep: Running on {}', filename]];
+    local updateInterval = ceil div [nEntries, 100];
+    local progress = [
+	success: 0,
+	errors: 0,
+	skipped: 0
+    ];
+    function UpdateMessage []
+	if mod [add tagvals progress, updateInterval] then return; endif
+	const BARS = 32;
+	local p = ceil (BARS * div [progress.success, nEntries]);
+	local q = ceil (BARS * div [progress.errors, nEntries]);
+	local r = ceil (BARS * div [progress.skipped, nEntries]);
+	p = min [BARS - q - r, p];
+	local fill = rep [' ', BARS];
+	fill [igen r] = '-';
+	fill [r + igen p] = '|';
+	fill [r + p + igen q] = '*';
+	local bar = tok_cat fill;
+	Message [
+	    msgKey,
+	    twrite [
+		'QuickPrep: Running on {} [{}]\n',
+		filename, bar
+	    ]
+	];
+    endfunction
+
+	// CliMessage outputs the current number of entry processed when used
+	// with the verbose option.  Outputs for final entry.
+
+    function CliMessage []
+	local incr = select [50, 100, nEntries < 400];
+	local n = add tagvals progress;
+
+	    // Report every 50 entries if total # entries is small-ish,
+	    // otherwise report every 100 entries.  Report last entry.
+
+	if verbose and (n > 0) then
+	    if (mod [n, incr] == 0) or (n >= nEntries) then
+		write [ 'QuickPrep:[{n:6.0f}] {}\n', n, filename];
+	    endif
+	endif
+    endfunction
+
+	// NextValidEntry is a local function that returns the next entry in the
+	// database.  It loads the entries on the fly except if an entry list is
+	// already loaded.  When using an entry list, it checks entries for
+	// validity before returning them.
+	//
+	// import idx, opt.entryList, noList, nEntries, progress;
+
+    local idx = 1;
+    function NextValidEntry [db, ent]
+
+	    // Get the next entry.
+
+	if noList then
+	    ent = db_NextEntry [db, ent];
+	elseif idx > nEntries then
+	    ent = 0;
+	else
+	    ent = opt.entryList(idx);
+	    idx = inc idx;
+	endif
+
+	    // Check for eof.
+
+	if ent == 0 then return 0; endif
+
+	    // Check that the entry key is valid, skip if invalid.
+
+	if isfalse db_EntryKey [db, ent] then
+	    progress.skipped = inc progress.skipped;
+	    CliMessage [];
+	    return NextValidEntry [db, ent];
+	endif
+
+	    // Option emptyOutput: Skip entries with non-empty output fields.
+
+	if istrue opt.emptyOutput then
+	    local data = db_ReadFields [db, ent, destinationField];
+	    local outputIsEmpty;
+
+		// Try to create molecule chains from the content of this MOE
+		// field.  If it does not work, that means the field is
+		// considered empty.
+
+	    if sourceType == 'moe' then
+		const QUICK_MOE_CREATION = [
+		    selection: 0, sets: 0, view: 0,
+		    box: 0, wall: 0, graphics: 0,
+		    sequence_only: 1
+		];
+		local tsys = SystemPush [];
+		local chains = first _moe_Create [data, QUICK_MOE_CREATION];
+		outputIsEmpty = isnull chains;
+		SystemPop tsys;
+
+		// Check for a null molecule data field.
+
+	    elseif sourceType == 'molecule' then
+		outputIsEmpty = allfalse data;
+	    endif
+
+	    if isfalse outputIsEmpty then
+		progress.skipped = inc progress.skipped;
+		CliMessage [];
+		return NextValidEntry [db, ent];
+	    endif
+	endif
+	return ent;	// current entry is valid, return it.
+    endfunction
+
+	// Main processing loop that will run QuickPrep on all chosen molecule
+	// entries in the selected database and output the resulting molecule
+	// in a target field.
+	// The constant MPU_ROOT determines when to compile the mpu loop.
+
+    local mol, entry, res, code;
+    const MPU_ROOT = MPU_HOSTCOUNT > 1 and MPU_THISHOST == 1;
+    local useMpu = 0;
+    local errors = [];
+    local entryKey = 0;
+#if MPU_ROOT
+    useMpu = not mpu_batch '$IsRunning' and isfalse opt.noMPU;
+    if useMpu then
+
+	    // If there is no valid entry in the db, skip the loop entirely.
+
+	code = '';
+	entryKey = NextValidEntry [dbKey, 0];
+	if isfalse entryKey then
+	    code = 'eof';
+	endif
+
+		// Process each entry with QuickPrep.
+
+	local entnum, udata;
+	while code <> 'eof' loop
+
+		    // Send the current molecule to be prepared.
+
+	    if entryKey > 0 then
+		mol = first db_ReadFields [dbKey, entryKey, sourceField];
+		[res, code, entnum, udata] = mpu_batch [
+		    'call',
+		    '_LIGX_ExecuteMol',
+		    [mol, opt.ligxOpt],
+		    entryKey
+		];
+		entryKey = NextValidEntry [dbKey, entryKey];
+	    else
+		[res, code, entnum, udata] = mpu_batch [''];
+	    endif
+
+		// Read the mpu output messages to process errors and results.
+
+	    if code == '' then
+		progress.success = inc progress.success;
+		db_Write [dbKey, udata, tag [destinationField, [res]]];
+		UpdateMessage [];
+		CliMessage [];
+	    elseif code == 'skip' then
+	    elseif code == 'eof' then
+		break;
+	    else
+		progress.errors = inc progress.errors;
+		errors = append [errors, [res, entnum]];
+		UpdateMessage [];
+		CliMessage [];
+	    endif
+	endloop
+    endif
+#endif
+
+	// Single thread loop processing of the database entries.
+
+    if not useMpu then
+	while entryKey = NextValidEntry [dbKey, entryKey] loop
+	    mol = first db_ReadFields [dbKey, entryKey, sourceField];
+	    [res, code] = task_call [
+		'_LIGX_ExecuteMol',
+		[mol, opt.ligxOpt],
+		[errmsg:'ignore', idle:0, title: 'Quickprep MDB entry']
+	    ];
+
+	    if code == '' then
+		local outMol = res;
+		progress.success = inc progress.success;
+		UpdateMessage [];
+		CliMessage [];
+		db_Write [dbKey, entryKey, tag [destinationField, [outMol]]];
+	    else
+		progress.errors = inc progress.errors;
+		errors = append [errors, [res, entryKey]];
+		UpdateMessage [];
+		CliMessage [];
+	    endif
+	endloop
+    endif
+
+	// Data cleanup and report.
+
+    db_Close dbKey;
+    Message [msgKey];
+    if not silentMode or verbose then
+	local rEntry = select ['entry', 'entries', nEntries == 1];
+	local skip_msg = twrite [
+	    ', {} skipped{}',
+	    progress.skipped,
+	    select [' (non-empty)', '', opt.emptyOutput]
+	];
+	local err_msg  = twrite [
+	    ', {} error{}',
+	    progress.errors,
+	    select ['s', '', progress.errors > 1]
+	];
+	local which_msg = twrite [
+	    '  {}{}{} only',
+	    select ['Empty entries', '', opt.emptyOutput],
+	    select [' of ', '', opt.emptyOutput and opt.selectedEntries],
+	    select ['Selected entries', '', opt.selectedEntries]
+	];
+	write [
+	    'QuickPrep: {}{}\n'
+	    '    Source field: {}\n'
+	    '    Destination field: {}\n'
+	    '    {}/{} {} prepared{}{}\n',
+	    filename,
+	    select [which_msg, '', opt.emptyOutput or opt.selectedEntries],
+	    sourceField,
+	    destinationField,
+	    progress.success,
+	    nEntries,
+	    select ['selected entries', rEntry, opt.selectedEntries],
+	    select [skip_msg, '', progress.skipped],
+	    select [err_msg, '', progress.errors]
+	];
+	write [
+	    'QuickPrep done {} ({f.2}s total)\n\n',
+	    asctime [], clock [] - startTime
+	];
+    endif
+
+    if call [] then return []; endif
+
+	// Return 0 if there are no error messages from the processing.
+	// Return 1 if there are any errors.
+
+    return [notnot length errors, errors];
+endfunction
+
+// ------------------------------- LIGAND PROPERTIES -------------------------
+
+function aMutagenic;
+function ph4_aDonor, ph4_aAcceptor;
+function aSlogP, aErtlTPSA;
+function QuaSAR_acalc_EHT;
+
+local function MW atoms
+    local impH  = aHCount atoms - aExplicitHCount atoms;
+    return (
+	  add el_DefaultMass aElement (atoms | aAtomicNumber atoms > 0)
+	+ 1.008 * add impH
+    );
+endfunction
+
+// StandardProperties calculates the standard LigX properties
+
+local function StandardProperties lig
+    local Qlig = lig | not aIsLight lig;
+    local mw   = MW lig;
+    local tpsa = add aErtlTPSA lig;
+    local don  = add notnot ph4_aDonor Qlig;
+    local acc  = add notnot ph4_aAcceptor Qlig;
+    local muta = sort uniq diff [aMutagenic Qlig, ''];
+    local [logS, logP, logD] = QuaSAR_acalc_EHT [
+	lig, ['h_logS', 'h_logP', 'h_logD']
+    ];
+
+    if length muta then muta = tok_cat droplast cat tr [muta, ', '];
+    else		muta = '';
+    endif
+
+    local tpsa_unit = twrite ['A^2 (don: {}, acc: {})', don, acc];
+
+    return [
+	[ 'toxic',	select ['yes','no',muta<>''],	muta	]
+    ,   [ 'weight',	mw,		'g/mol'		]
+    ,   [ 'TPSA',	tpsa,		tpsa_unit	]
+    ,   [ 'logP',	logP,		''		]
+    ,   [ 'logD',	logD,		'(pH=7)'	]
+    ,   [ 'logS',	logS,		''		]
+    ];
+endfunction
+
+// PropFormat takes a laminated vector of the form [label, value, unit]
+// and formats the data into a reasonable table with the values aligned on
+// the decimal point.  The *last* instance of a label is used so that basic
+// values can be overridden.
+
+local function PropFormat [label, value, unit]
+    local i;
+
+    [label,value,unit] = uext [label,value,unit];
+
+    label = utf8_keep [app token label, 30];
+    unit = app token unit;
+
+    // !!! ACCEPT NON-LAMINATED
+    [label,value,unit] = [label,value,unit] || [ not isspace label ];
+    [label,value,unit] = [label,value,unit] || [ reverse m_uniq reverse label ];
+
+    local n = l_length [label,value,unit];
+
+	// Convert the data to strings and format the data if
+	// it is in numeric form.  Calculate the position of
+	// the decimal point.
+
+    function _trim str = drop [str, dec add first x_pack not isspace str];
+    function trim str = reverse _trim reverse _trim str;
+
+    local dpt;
+    local decpt = rep [" ", n], fval = rep ['', n];
+
+    for i = 1, n loop
+	if isscalarnum value(i) then
+	    if abs value(i) > 100000 then
+		value(i) = swrite ['{n:.2g}', value(i)];
+	    else
+		value(i) = swrite ['{n:.2f}', value(i)];
+	    endif
+	elseif isflatchar value(i) then value(i) = trim value(i);
+	elseif isflattok  value(i) then value(i) = trim string value(i);
+	else				value(i) = "???";
+	endif
+
+	if (dpt = indexof [".", value(i)]) then
+	    decpt(i) = ".";
+	    fval(i)  = token drop [value(i), dpt];
+	    value(i) = token keep [value(i), dec dpt];
+	else
+	    value(i) = token value(i);
+	endif
+    endloop
+
+	// Piece everything together into nice columns
+
+    local fmt = tok_cat [
+	'     '
+    ,	'{', totok neg max [10, max utf8_length label], 'u}'
+    ,	' :   '
+    ,   '{', totok max [1, max utf8_length value], 'u}'
+    ,	'{}'
+    ,   '{', totok neg max [1, max utf8_length fval ], 'u}'
+    ,   '   {', totok neg max [1, max utf8_length unit], 'u}'
+    ,	'\n'
+    ];
+    local description = cat apt swrite [fmt, label, value, decpt, fval, unit];
+    return cat ["Ligand Properties\n", description];
+endfunction
+
+// A monitor can be enabled to show ligand properties of interest (weight,
+// logP etc) as a MOE message.  We use a dvar to control the monitor.
+
+global function _LIGX_LigandProperties [enable, subtask]
+    local old_prio = task_prio 0;
+    local dvar = dvar_open LIGPROP_DVAR;
+    local tkey = task_key add *dvar.tid;
+
+    if isnull enable or enable === 'key' then
+	dvar_close dvar;
+	task_prio old_prio;
+	return keep [tkey, not call[]];
+    endif
+
+    if     enable === 'toggle'		    then enable = not tkey;
+    elseif enable === 'on'  or enable === 1 then enable = 1;
+    elseif enable === 'off' or enable === 0 then enable = 0;
+    else					 enable = 0;
+    endif
+
+    if not enable then			// bring it down
+	task_kill tkey;
+	dvar_close dvar;
+	task_prio old_prio;
+	return keep [0, not call[]];
+    endif
+
+    if enable and tkey then		// already up
+	dvar_close dvar;
+	task_prio old_prio;
+	return keep [tkey, not call[]];
+    endif
+
+	// Start the LigandProperties task
+
+    local [tid,code] = task_fork[
+	prio:0, idle:1
+    ,	master: select ['parent', 'none', istrue subtask]
+    ,	errmsg:'ignore'
+    ];
+
+    if code <> 'child' then		// return to caller
+	*dvar.tid = tid;
+	dvar_close dvar;
+	task_prio old_prio;
+	return keep [tid, not call[]];
+    endif
+
+    task_settitle [-1, 'Ligand Properties'];
+    dvar = dvar_open dvar;
+
+	// GetProperties obtains a non-laminated list of properties.
+	// Call any customization functions.
+
+    local fcn_2d = sym_find_f '_LIGX_LigandProperties_2D_*';
+
+    function GetProperties lig
+	local prop = StandardProperties lig;
+	local i;
+
+	for i = 1, length fcn_2d loop
+
+		// This needs to remain a task_call to account for fcn_2d
+		// potentially grabbing custom functions from plugins and to
+		// ensure stability of the properties calculations.
+
+	    local taskOpt = [
+		title: twrite ['!{}', fcn_2d(i)],
+		errmsg: 'ignore',
+		master: 'parent',
+		creator: 'blockEOK',
+		prio: 1
+	    ];
+	    local [res, code] = task_call [fcn_2d(i), lig, taskOpt];
+	    if code == 'error' then
+		write ['_LIGX_LigandProperties: error ({}) : {}\n',
+		    fcn_2d(i), res
+		];
+	    else
+		if isnull res(3) then res(3) = ''; endif
+		if not isscalartok res(1) and not isscalartok res(3) then
+		    write ['_LIGX_LigandProperties illegal value ({})\n',
+			fcn_2d(i)
+		    ];
+		endif
+	    endif
+	    prop = append [prop, res];
+	endloop
+
+	return prop;
+    endfunction
+
+	// Enter the main infinite loop of the properties monitor
+
+    const MULTI_LIG = 'Ligand Properties: Multiple active ligands';
+    const NO_LIG = 'Ligand Properties: No active ligand';
+
+    local msg = 0;
+    local previousState = -1;
+    local nonview = -1, coll = [], rls_set_atoms = [];
+    local prop, previousLig, previousLdata;
+    loop
+	sleep 0.25;
+
+	    // Check if SystemNonrenderState changed.
+
+	local stateChanged = SystemNonrenderState [] <> previousState;
+
+	    // Check also nonview state to track ligand set changes.
+
+	if nonview <> SystemNonviewState [] then
+	    const LIGREC = ['Ligand','Receptor','Solvent'];
+	    nonview = SystemNonviewState [];
+	    local new_coll = oCollections [];
+	    if neL [new_coll, coll] or anytrue join [new_coll, LIGREC] then
+		local new_rls_set_atoms = app oGetCollection LIGREC;
+		coll = new_coll;
+		if neL [new_rls_set_atoms, rls_set_atoms] then
+		    rls_set_atoms = new_rls_set_atoms;
+		    *dvar.update = 1;	// request update
+		endif
+	    endif
+	endif
+
+	    // Check if SystemNonrenderState changed or an update was requested.
+
+	if allfalse [*dvar.update, stateChanged] then continue; endif
+
+	    // Find the current ligand.
+
+	local lig = cat app third GetGroups [];
+	local bondgraph = BondGraph lig;
+	local comp = graph_ccomponent_list bondgraph;
+	lig = split [lig[cat comp], app length comp];
+	lig = lig | not app andE aInert lig;
+	local ldata = [
+	    aElement lig, aIon lig,
+	    aForceRS lig, aGeometry lig, aHintLP lig,
+	    bondgraph
+	];
+
+	    // Choose the text to display in Ligand properties.
+
+	local mtext = '';
+	if length lig == 0 then				mtext = NO_LIG;
+	elseif length lig > 1 then			mtext = MULTI_LIG;
+	elseif length lig == 1 then
+	    lig = cat lig;
+
+		// Show multiple ligands message for multiple molecules.
+
+	    if length uniq aMoleculeNumber lig > 1 then	mtext = MULTI_LIG;
+
+		// Only update the properties if the ligand atoms changed.
+		// Note that atom properties (e.g. element) can change
+		// without the atom key changing, so need explicit check.
+
+	    else
+		if	neL [previousLig,   lig]
+		    or	neL [previousLdata, ldata]
+		then
+		    prop = GetProperties lig;
+		endif
+		mtext = PropFormat tr cat [prop, *dvar.ligprop];
+	    endif
+	endif
+
+	    // Reset calculated properties.
+
+	*dvar.ligprop = [];
+	*dvar.update = 0;
+
+	    // Store the current state of the display.
+
+	previousLig   = lig;
+	previousLdata = ldata;
+	previousState = SystemNonrenderState[];
+	nonview = SystemNonviewState [];
+
+	    // Update the text display.
+
+	msg = Message [msg, token mtext];
+    endloop
+endfunction
+
+local function _LIGX_LigandPropertiesUpdate opt
+    local old_prio = task_prio 0;
+    local dvar = dvar_open LIGPROP_DVAR;
+    if task_key add *dvar.tid then
+	*dvar.ligprop = opt.ligprop;
+	*dvar.update = 1;
+    endif
+    dvar_close dvar;
+    task_prio old_prio;
+endfunction
+
+#if ANDREWS_PKI
+//	Functional Group Contributions to Drug-Receptor Interactions
+//	P.R.Andrews, D.J.Craik, J.L.Martin
+//	J.Med.Chem., 27, 1984, 1648-1657
+
+global function _LIGX_LigandProperties_2D_Andrews_pKi atoms
+    const PKI_PARAM = tr [
+	[  0.0, '[!#Q]'				],	// light
+	[  0.8, '[CX4]'				],	// Csp3
+
+	[  8.2, '[CX3i](=O)[OX1]'		],	// COO-
+	[  3.4, '[CX3i](=O)'			],	// carbonyl
+	[  0.7, '[#6;i]'			],	// Csp2 Csp
+
+	[ 11.5, '[#7+*!$(*~[-*])]'		],	// N+
+	[  1.2, '[#7]'				],	// N
+	[ 10.0, '[P+]([OX1])([OX1])(O)O'	],	// OPO3--
+
+	[  0.0, '[OH]C=O'			],
+	[  0.0, '[OH][PX4]([OX1])[OX1]'		],
+
+	[  0.0, '[#8,#16;Q2X2]C=[O,S]'		],	// (thio)ester
+	[  1.1, '[#8,#16;Q2X2]([#6])[#6]'	],	// (thio)ether
+
+	[  1.3, '[#G7]'				],	// halogen
+	[  0.0, '*'				]	// default
+    ];
+    const CHECK = null SMARTS second PKI_PARAM;
+
+    atoms = (atoms | not aIsLight atoms and not aInert atoms);
+    local pKi = add PKI_PARAM(1)[sm_Indexof [atoms, PKI_PARAM(2)]];
+
+    local [A,B] = apt get [[atoms], graph_uedges BondGraph atoms];
+
+    [A,B] = [A,B] || [ aDegree A > 1 and aDegree B > 1 ];
+    [A,B] = [A,B] || [ not bInRing [A,B] ];
+
+    [A,B] = [A,B] || not [
+	(sm_Match ['[*X4H3]', A] or sm_Match ['[*X4H3]', B])
+    ];
+
+    function smi2 [p1,p2] = (
+	   sm_Match [p1,A] and sm_Match [p2,B]
+	or sm_Match [p1,B] and sm_Match [p2,A]
+    );
+
+    [A,B] = [A,B] || not [
+	   smi2 [ '[NX3!i!r3!r4]', '[C+0]=[O,S,N+]'		]
+	or smi2 [ '[NX3!i!r3!r4]', '[C+1]-[O,S,N;X3!i!r3!r4]'	]
+    ];
+
+    return [ 'Andrews', (pKi - 0.7 * l_length [A,B] - 14) / 1.36448, 'pKi' ];
+endfunction
+#endif
+
+// ----------------------------- ENERGY MINIMIZE -----------------------------
+
+function Superpose;
+function dock_score_GBVIWSA_dG;
+
+// LigX_MM performs energy minimization of the system.  It is assumed
+// that the system is well prepared.
+
+const PRIVATE_SETUP = 0;
+
+local function LigX_potSetup []
+#   if 0
+    local rcutoff    = 10;
+    return [
+	cutoffEnable	: 1,
+	cutoffOn	: max [rcutoff - 2.0, 0.8 * rcutoff],
+	cutoffOff	: rcutoff,
+	solEnable	: 0,
+	eleDielectric	: 1,
+	solDielectric	: 80,
+	eleDist		: 2		// reaction field
+    ];
+#   endif
+endfunction
+
+local function LigX_MM mm_opt
+    MM tagcat [mm_opt, [
+	keep_chirality	: '',
+	gtest		: GetConfig 'n_refineRMSG',
+	maxit		: 500,
+	careful		: 1000,
+	potSetup	: LigX_potSetup []
+    ]];
+endfunction
+
+// LocalStrain calculates the local strain energy of the ligand (assuming
+// that there is some kind of receptor).  We return a LigandProperty
+// line if there is something to report else and empty line.
+// !!! LocalStrain only if one ligand molecule
+
+local function LocalStrain [rec,sol,lig]
+
+    local [idx,seg] = sam aMoleculeNumber lig;
+    lig = split [lig[idx], seg];
+    lig = lig | not app andE aInert lig;
+    lig = cat lig;
+    lig = lig[x_sort aNumber lig];
+
+    if not length lig then return []; endif
+    if not add app length [rec,sol] then return []; endif
+
+    local mol = mol_Extract lig;	// !!! COVALENT BINDERS?
+    local a_tether = aTether lig;	// tether parameters
+    local a_fixed = aFixed lig;		// fixed parameters
+    local a_inert = aInert lig;		// inert parameters
+					// !!! RESTRAINTS?
+    local psys = SystemPush [];
+    local chains = mol_Create mol;
+    local atoms = cat cAtoms chains;
+
+    aSetFixed [atoms, a_fixed];		// copy the fixed flags and tethers
+    aSetTether cat [[atoms], a_tether];
+    aSetState [atoms, aMoleculeNumber atoms];
+    aSetInert [atoms, a_inert];
+
+    Add_H cat cAtoms chains;		// just in case...
+    atoms = cat cAtoms chains;
+
+    pot_FinalizeModel [];
+    local potSetup = LigX_potSetup [];
+    potSetup.state0 = 1;
+    potSetup.state1 = 0;
+    potSetup.state2 = 0;
+
+    local pos1 = aPos atoms;
+    local E1 = first Potential [dX:0, setup: potSetup];
+
+    (MM [
+	pot_charge	: 0,
+	keep_chirality	: '',
+	gtest		: 0.01,
+	maxit		: 500,
+	potSetup	: potSetup
+    ]);
+    local E0 = first Potential [dX:0, setup: potSetup];
+    local pos0 = aPos atoms;
+
+    local Estrain = E1 - E0;
+//    local Estrain_nQ = Estrain * 1000 * invz MW atoms;
+    local Estrain_nQ = Estrain * invz add (aAtomicNumber atoms > 1);
+
+    local mw = (
+	  el_DefaultMass aElement atoms
+	+ el_DefaultMass 'H' * (aHCount atoms - aExplicitHCount atoms)
+    );
+    mw = (mw * not andE aFixed atoms) + (1000 * aFixed atoms);
+
+    local rmsd = sqrt first Superpose [ [pos1, pos0], mw ];
+    local unit = twrite [
+	'kcal/mol ({}{n:.3f})  rmsd: {n:.3f} A'
+    ,	select [' ', '-', Estrain_nQ >= -1e-10]
+    ,	abs Estrain_nQ
+    ,	rmsd
+    ];
+
+    SystemPop psys;
+    return [ [ 'strain'  , Estrain, unit ] ];
+endfunction
+
+// E_GBVI calculates the GB/VI interaction energy without ligand strain.
+// Return the ligand properties; none if there is no receptor/solvent.
+// Be careful to ignore other irrelevant atoms.
+// !!! NEEDS TO BE IN A PRIVATE SYSTEM OR USE STATES TO AVOID H-BOND BLINK
+
+local function E_GBVI [rec,sol,lig]
+    if not length lig then return []; endif
+    if not add app length [rec,sol] then return []; endif
+
+    const potSetup_GBVI = [
+	cutoffEnable:	1,	cutoffOn:	8,	cutoffOff:	10,
+	eleDist:	0,	eleDielectric:	1.0,	solDielectric:	80.0,
+	eleEnable:	1,	vdwEnable:	1,	solEnable:	1,
+	resEnable:	0,
+	state0:		1,	state1:		1,	state2:		1
+    ];
+
+    local old_prio = task_prio 0;
+
+    local old_inert = aInert Atoms[];
+    local rsl_inert = aInert [rec,sol,lig];
+
+    aSetInert [Atoms[], 1];
+
+    aSetInert [[rec,lig], rsl_inert[[1,3]]];
+    local Ec = first Potential [W:0, dX:0, setup:potSetup_GBVI];
+
+    aSetInert [[rec,lig], [rsl_inert(1),1]];
+    local Er = first Potential [W:0, dX:0, setup:potSetup_GBVI];
+
+    aSetInert [[rec,lig], [1,rsl_inert(3)]];
+    local El = first Potential [W:0, dX:0, setup:potSetup_GBVI];
+
+    aSetInert [Atoms[], old_inert];
+
+    local Egbvi = Ec - Er - El;
+    local Egbvi_nQ = Egbvi * invz add (aAtomicNumber lig > 1);
+
+    task_prio old_prio;
+
+    local unit = twrite ['kcal/mol ({n:.3f})', Egbvi_nQ];
+
+    return [ ['solvation', Egbvi, unit] ];
+endfunction
+
+// E_Dock calculates a docking score (GBVI/WSA dG).
+
+local function E_Dock [rec,sol,lig]
+
+    local [idx,seg] = sac graph_ccomponent BondGraph lig;
+    lig = split [lig[idx], seg];
+    lig = cat (lig | app orE not aInert lig);
+
+    [idx,seg] = sac graph_ccomponent BondGraph rec;
+    rec = split [rec[idx], seg];
+    rec = cat (rec | app orE not aInert rec);
+
+    [idx,seg] = sac graph_ccomponent BondGraph sol;
+    sol = split [sol[idx], seg];
+    sol = cat (sol | app orE not aInert sol);
+
+    if not length lig then return []; endif
+    if not add app length [rec,sol] then return []; endif
+    if not add (not aInert rec and aAtomicNumber rec) then return[]; endif
+
+    // !!! docking functions cannot handle covalent binders
+    if length diff [cat aBonds lig, lig] then return []; endif
+
+    local old_prio = task_prio 0;
+    local r_atoms = rec | Nearby [rec, lig, 25.0];
+    local score = dock_score_GBVIWSA_dG ['scoreLigX', [r_atoms, lig]];
+    local nQ = add (aAtomicNumber lig > 1);
+    task_prio old_prio;
+
+    local unit = twrite [
+	'kcal/mol ({}{n:.3f})',
+	select [' ', '-', score >= -1e-10],
+	abs score * invz nQ
+    ];
+    return [ [ 'affinity', score, unit] ];
+endfunction
+
+// _LIGX_Minimize handles basic minimization of the ligand in the receptor.
+// We don't warn or anything - this is supposed to be part of a cycle
+// If the system was prepared with LigX then many atoms will be tethered.
+// In any case, we leave tethers alone, but fix atoms far from the ligand.
+
+global function _LIGX_Minimize []
+    const FIXW = 1e10;
+
+	// prevent multiple instances of minimization
+
+    local old_prio = task_prio 0;
+    local dvar = dvar_open LIGXMM_DVAR;
+    if add *dvar.tid then
+	dvar_close dvar;
+	task_prio old_prio;
+	return;
+    endif
+    *dvar.tid = task_id -1;
+    task_prio old_prio;
+
+    UndoSnapshot [];
+
+    // !!! EXTRACT PRIVATE SYSTEM (TRUNCATED FROM ALL ATOMS IF NOT TOO BIG)
+    // !!! OPTIMIZE HYDROXYLS
+    // !!! WARN IF FREE SYSTEM (UNPREPARED, OR TOO STRAINED)
+
+    task_settitle [-1, 'Energy Minimize'];
+    pot_FinalizeModel [];			// affects other atoms !!!
+
+    local [rec,sol,lig] = PrepareSystem [];
+
+    LigX_MM [ msg_prefix: '' ];
+
+	// If the ligand properties monitor is alive then calculate
+	// some properties and update the display
+
+    if length lig and _LIGX_LigandProperties 'key' then
+	local lig_prop = [];
+	if length lig then
+	    lig_prop = cat [
+		LocalStrain [rec,sol,lig]
+	    ,	E_GBVI [rec,sol,lig]
+	    ,	E_Dock [rec,sol,lig]
+	    ];
+	endif
+
+	_LIGX_LigandPropertiesUpdate [
+	    ligprop : lig_prop
+	];
+    endif
+
+    dvar_close dvar;
+endfunction
+
+// _LIGX_MinimizeV performs a vacuum minimization of all active ligands
+// in the system and creates replicas
+
+function conf_Superpose;
+function fwrite_MOE, fread_MOE;
+
+global function _LIGX_MinimizeV []
+    if second task_fork [] <> 'child' then return; endif
+    task_settitle [-1, 'MinimizeV'];
+
+    local potSetup = LigX_potSetup [];
+
+	// Locate all active ligands and obtain their connected components
+
+#if 1
+    local lig = Atoms[];
+    lig = lig | aClassRLS lig == 'lig';
+    local comp = graph_ccomponent_list BondGraph lig;
+    lig = split [lig[cat comp], app length comp];
+
+    local mask = app orE aSelected lig;
+
+    if add mask <> 1 then
+	Warning 'Select a single ligand for vacuum minimization.';
+	exit[];
+    endif
+
+    lig = cat (lig | mask);
+#else
+    local group = GetGroups [];			// [...[rec,sol,lig]...]
+    local lig = app third group;
+    local i;
+
+    for i = 1, length lig loop
+	local comp = graph_ccomponent_list BondGraph lig(i);
+	lig(i) = split [ lig(i)[cat comp], app length comp ];
+    endloop
+
+    lig = cat lig;
+    if length lig > 1 then
+	lig = lig | app orE aSelected lig;
+    endif
+    lig = cat lig;
+
+    if length graph_ccomponent_list BondGraph lig <> 1 then
+	Warning 'Select a single active ligand for vacuum minimization.';
+	exit[];
+    endif
+#endif
+
+    local cnum = max [0, cNumber uniq aChain lig];
+    local [nsys,osys] = SystemPush lig;
+    cSetName [Chains[], tok_cat [cName Chains[], ' (Vac)']];
+
+	// Minimize the energy of ligand in isolation.
+
+    pot_FinalizeModel [];
+    potSetup.state0 = 1;
+    potSetup.state1 = 0;
+    potSetup.state2 = 1;
+
+    local atoms = Atoms[];
+    local old_state = aState atoms;
+    local pos0 = aPos atoms;			// original position
+
+    aSetState [atoms, aMoleculeNumber atoms];
+    aSetInert [atoms, 0];
+
+    local E1 = first Potential [dX:0, setup: potSetup];
+    (MM [
+	pot_charge	: 0,
+	keep_chirality	: '',
+	gtest		: 0.01,
+	maxit		: 500,
+	potSetup	: potSetup
+    ]);
+    local E0 = first Potential [dX:0, setup: potSetup];
+
+    local Estrain = E1 - E0;
+    local Estrain_nQ = Estrain * invz add (aAtomicNumber atoms > 1);
+    if Estrain_nQ < 1e-10 then Estrain_nQ = 0; endif
+
+    local [ok,rmsd,R,T,Yi] = conf_Superpose [
+	pos0, aPos atoms, aFixed atoms, aMass atoms,
+	aPrioZQH atoms, BondGraph atoms,
+	REAL_MAX
+    ];
+
+    aSetState [atoms, old_state];
+    aSetPos [atoms, matmul [R, aPos atoms - T]];
+    aSetSelected [atoms, 0];
+    aSetInert [atoms, 1];
+    aSetSelected [atoms, 0];
+    aSetHidden [atoms, 0];
+
+	// Re-create the minimized objects in MOE and reposition
+	// the chain below the original
+
+    const IO_OPT = [ view: 0, graphics: 'none', wall: 0, box: 0 ];
+    local ftmp = fopenw '';
+    fwrite_MOE [ftmp, atoms, IO_OPT];
+    fseek [ftmp, 0];
+    SystemPop [nsys,osys];
+
+    UndoSnapshot[];
+    local nchains = fread_MOE [ftmp, IO_OPT];
+    fclose ftmp;
+
+    cSetNumber [nchains, (cnum + dec x_id nchains)];
+
+    const SETNAME = 'MinimizeV';
+    oSetCollection [SETNAME, uniq cat [oGetCollection SETNAME, nchains]];
+
+	// color the new atoms distinctively
+
+    if GetRCBoolean ['LigX.minimizeV.colorEnable',0] then
+	local na = cat cAtoms nchains;
+	if orE (aElement na == 'C') then na = na | aElement na == 'C'; endif
+	aSetRGB [na, atoi GetRC ['LigX.minimizeV.color', '0xFFA880']];
+	aSetColorBy [na, 'rgb'];
+    endif
+
+	// Put up confirmation message
+
+    local mtext = twrite [
+	'Minimize (Vac): Estrain: {n:.2f} kcal/mol ({n:.3f})  rmsd: {n:.3f}'
+    ,	Estrain, Estrain_nQ, rmsd
+    ];
+    write ['{}\n', mtext];
+
+    if GetRCBoolean ['LigX.minimizeV.msg', 1] then
+	Message [0, mtext];
+	local mtime = GetRCNumber ['LigX.minimizeV.msgtime', 10];
+	sleep max [0, min [60, mtime]];
+    endif
+
+    exit[];
+endfunction
+
+// duplicate_obj duplicates molecule objects. It is e.g. used by
+// _LIGX_Duplicate. It can either duplicate a ligand, chains or a whole tag
+// If specified, also graphics objects are duplicated. Duplicated objects
+// are assigned a new uniq chain or tag name.
+//
+// See opt vector for configurable options (e.g. rendering).
+
+local function duplicate_obj [obj, gobj, opt]
+
+    opt = tagcat [opt, [
+	    activate:	   1	// activate copied atoms, hide/inert source
+	,   stick:	   0	// render copied atoms in stick mode
+	,   element:	   1	// color copied atoms by element, rib by 2o
+	,   deactivateAll: 0	// deactivate all other ligands
+	,   render:	   0	// copy rendering
+	,   restraint:	   1	// copy restraints
+	,   message:	   1	// show duplication message in main window
+	,   mode:	  'lig' // 'lig', 'tag', 'chain'
+    ]];
+
+	// Copy the ligand and edit its name.
+
+    function SplitName cname
+	local name = reverse string cname;
+	if not (name(1) === ")") then return [cname, 1]; endif
+	name = dropfirst name;
+	local i = indexof ["(", name];
+	if i < 2 then return [cname, 1]; endif
+	if not andE isdigit keep [name, dec i] then return [cname,1]; endif
+	if not (name(inc i) === " ") then return [cname,1]; endif
+	return [
+	    token reverse drop [name, inc i],
+	    atof token reverse keep [name, dec i]
+	];
+    endfunction
+
+    local all_names;
+    if opt.mode == 'tag' then
+	all_names = tr app SplitName cTag  Chains [];
+    else
+	all_names = tr app SplitName cName Chains [];
+    endif
+
+    function DupName cname
+	cname = first SplitName cname;
+	local name = all_names || [ all_names(1) == cname ];
+	if not length name then return cname; endif
+	local n = inc max name(2);
+	return tok_cat [cname, ' (', totok n, ')'];
+    endfunction
+
+	// Re-create the minimized objects in MOE
+
+    const MOE_OPT = [
+	selection: 1, sets: 1, view: 1, box: 1, wall: 1, graphics: 1,
+	sequence_only: 0
+    ];
+    local chains = uniq cat oChains obj;
+    local atoms = uniq cat oAtoms obj;
+    local rctr = ViewRotationCenter [];
+    local res = uniq cat oResidues obj;
+    local moe = _moe_Extract [obj, gobj, MOE_OPT];
+    local [newchains, newgobj] = _moe_Create [moe, MOE_OPT];
+    local newres = cat cResidues newchains;
+    local newatoms = cat cAtoms newchains;
+    moe = [];
+
+	// Reapply rotation center if it was not part of the
+	// duplicated atoms and hence was copied by moe_Extract/Create.
+
+    if	    rctr
+	and isnull join [rctr, atoms]
+	and not ViewRotationCenter []
+    then
+	ViewRotationCenter rctr;
+    endif
+
+	// Adjust tag or chain name of duplicated objects.
+
+    local uname, dname;
+    if opt.mode == 'tag' then
+	uname = uniq cTag newchains;
+	dname = app DupName uname;
+	cSetTag [newchains, dname[indexof [cTag newchains, uname]]];
+    else
+	uname = uniq cName newchains;
+	dname = app DupName uname;
+	cSetName [newchains, dname[indexof [cName newchains, uname]]];
+    endif
+
+	// Move duplicated ligand chain(s) behind original ligand chain(s)
+	// The original chain is hidden and made inert; its original
+	// hidden and inert states are saved to Hidden2 and Inert2 to
+	// permit restoration by System Manager.
+
+    local dest = max cNumber oChains atoms;
+    local c = cat append [
+	newchains,
+	(Chains[])[diff [drop [igen nChains[], dest], cNumber newchains]]
+    ];
+    cSetNumber [c, dest + igen length c];
+
+	// Set Hidden2/Inert2... flags to preserve partial hidden state
+	// information of the duplicated objects to be hidden for the
+	// System Manager.
+
+    if not andE aHidden atoms then
+	aSetHidden2 [atoms, aHidden atoms];
+    endif
+    if not andE aInert atoms then
+	aSetInert2 [atoms, aInert atoms];
+    endif
+    if orE rRibbonEnable res then
+	rSetRibbonEnable2 [res, rRibbonEnable res];
+    endif
+    if orE GVisible gobj then
+	_GSetVisible2 [gobj, GVisible gobj];
+    endif
+
+	// In tag mode, remember current visiblity state of graphics
+	// objects associated to tag chains.
+
+    if opt.mode == 'tag' then
+	local tag_gobj = cat cGKey chains;
+	_GSetVisible2 [tag_gobj, GVisible tag_gobj];
+    endif
+
+    aSetHidden   [atoms, 1];
+    aSetInert    [atoms, 1];
+    aSetSelected [atoms, 0];
+    rSetSelected [res, 0];
+    cSetSelected [chains, 0];
+    rSetRibbonEnable [res, 0];
+    GSetVisible  [gobj, 0];
+
+	// Select the duplicated atoms.
+
+    aSetSelected [Atoms[], indexof [Atoms[], newatoms]];
+
+    if not opt.render then
+	aSetHidden	 [newatoms, 0];
+	aSetColorBy	 [newatoms, 'element'];
+	rSetRibbonEnable [newres,   0];
+    endif
+
+	// Activate and show new atoms. If opt.render==1 do not
+	// force all atoms visible, unless the duplicated object
+	// would be hidden otherwise.
+
+    if opt.activate then
+	local is_vis =
+		anyfalse aHidden newatoms
+	    or	anytrue (_rIsRibbonVisible newres and rRibbonEnable newres)
+	;
+	aSetInert  [newatoms, 0];
+	if not opt.render or not is_vis then
+	    local is_vis2 =
+		   anyfalse aHidden2 newatoms
+		or anytrue (_rIsRibbonVisible newres and rRibbonEnable2 newres)
+	    ;
+	    if is_vis2 then
+		aSetHidden [newatoms, aHidden2 newatoms];
+		rSetRibbonEnable [newres, rRibbonEnable2 newres];
+	    else
+		aSetHidden [newatoms, 0];
+	    endif
+	endif
+    endif
+
+	// Ligand stick option. Overrides partially opt.render.
+
+    if opt.stick then
+	aSetHidden	 [newatoms, 0];		// override opt.render
+	rSetRibbonEnable [newres, 0];
+	rSetRibbonMode   [newres, 'none'];
+
+	aSetBondLook [newatoms, 'cylinder'];
+	aSetNucleusLook [
+	    newatoms, select ['none', 'small-sphere', aBondCount newatoms]
+	];
+    endif
+
+	// Color atoms by element and ribbons by secondary structure.
+
+    if opt.element then
+	aSetColorBy [newatoms, 'element'];
+	rSetRibbonColorBy [newres, 'r:aseg'];
+    endif
+
+	// Remove restraints if opt.restraint == 0. Otherwise they
+	// are kept through the duplication process.
+
+    if not opt.restraint then
+	aSetFixed	[newatoms, 0];
+	aSetTether	[newatoms, [0,0,0],0,0,0];
+	aSetForceRS	[newatoms, 0];
+	local restr = Restraints [];
+	local m_restr = app alltrue apt m_join [restr(3), [newatoms]];
+	RestraintDestroy (restr(1) | m_restr);
+	restr = rConstraints [];
+	m_restr = app alltrue apt m_join [restr(2), [newres]];
+	rConstraintSet	[(restr(1) | m_restr), []];
+    endif
+
+	// Old to-be-removed option. hide and deactivate all "other" ligands.
+
+    if opt.deactivateAll then
+	local all_lig = Atoms[];
+	all_lig = all_lig | aClassRLS all_lig == 'lig';
+	all_lig = diff [all_lig,  newatoms];
+	aSetInert [all_lig, 1];
+	aSetHidden [all_lig, 1];
+    endif
+
+	// Display a text message as confirmation.
+
+    if opt.message then
+	if second task_fork [idle:1] == 'child' then
+	    task_settitle [-1, '!Duplicate Message Task'];
+
+	    local mtext = twrite ['Duplicated {n:.9g} atoms', length newatoms];
+	    local mfact = [], mask = [];
+
+	    if orE (mask = aHidden newatoms) then
+		mfact = append [mfact, twrite ['hidden: {n:.9g}', add mask]];
+	    endif
+	    if orE (mask = aInert newatoms) then
+		mfact = append [mfact, twrite ['inert: {n:.9g}', add mask]];
+	    endif
+	    if orE (mask = aFixed newatoms) then
+		mfact = append [mfact, twrite ['fixed: {n:.9g}', add mask]];
+	    endif
+	    if orE (mask = (aTether newatoms)(2) > 0) then
+		mfact = append [mfact, twrite ['tethered: {n:.9g}', add mask]];
+	    endif
+
+	    if length mfact then
+		mfact = tok_cat dropfirst cat tr [', ', mfact];
+		mtext = tok_cat [mtext, ' (', mfact, ')'];
+	    endif
+
+	    Message [0, mtext];
+	    sleep 5;
+	    exit [];
+	endif
+    endif
+
+    return newatoms;
+endfunction
+
+// get_dup_ligand returns the ligand atoms to be duplicated, based on
+// the current atom selection. It enforces that only one connected component
+// ligand can be selected for duplication.
+
+local function get_dup_ligand []
+    local lig = Atoms[];
+    lig = lig | aClassRLS lig == 'lig';
+    local comp = graph_ccomponent_list BondGraph lig;
+    lig = split [lig[cat comp], app length comp];
+    local duplig = lig;			// ligand to duplicate
+    local mask = app orE aSelected duplig;
+
+	// If there is only one ligand and no atoms selected: Duplicate it.
+
+    if add mask == 0 and 1 == length lig then
+	if not length SelectedAtoms[] then
+	    mask = 1;
+	endif
+    endif
+
+    if add mask <> 1 then
+	Warning 'Select a single ligand for duplication.';
+	exit[];
+    endif
+
+    duplig = cat (duplig | mask);	// a single connected ligand
+    return duplig;
+endfunction
+
+// get_dup_tag returns the tag chains to be duplicated, based on
+// the current atom selection. It enforces that only one tag can
+// be selected for duplication.
+
+local function get_dup_tag []
+    local chains = [];
+    local sel = SelectedAtoms [];
+    local tagid = uniq cTagId uniq aChain sel;
+
+    if isnull sel and 1 == length uniq cTagId Chains[] then
+	chains = Chains[];
+    elseif length tagid <> 1 then
+	Warning 'Select atoms in a single tag for duplication.';
+	exit[];
+    else
+	chains = Chains[] | cTagId Chains[] == tagid;
+    endif
+
+    return chains;
+endfunction
+
+// get_dup_chain returns the chain(s) to be duplicated, based on
+// the current atom selection. It enforces that only one chain can
+// be selected for duplication. If atoms of the selected chain are
+// connected to atoms in other chains (but the same tag) the user
+// is asked to confirm to duplicate them as well or not.
+
+local function get_dup_chain []
+    local sel = SelectedAtoms [];
+    local obj = uniq aChain sel;
+
+    if isnull sel and 1 == length Chains[] then
+	obj = Chains[];
+    elseif length obj <> 1 then
+	Warning 'Select atoms in a single chain for duplication.';
+	exit[];
+    else
+	local tagid = cTagId obj;
+	local molnum = uniq aMoleculeNumber cat cAtoms obj;
+	local conn_atm = Atoms[] | indexof [aMoleculeNumber Atoms[], molnum];
+	conn_atm = conn_atm | cTagId aChain conn_atm == tagid;
+	if length uniq aChain conn_atm > 1 then
+	    if YesNoCancel
+		'Atoms in the selected chain are connected\n'
+		'to atoms in other chains in the same tag.\n\n'
+		'Should these atoms be duplicated as well?'
+	    then
+		obj = conn_atm;
+	    endif
+	endif
+    endif
+
+    return obj;
+endfunction
+
+// _LIGX_Duplicate duplicate objects (e.g. ligands via RHS|Ligand|Duplicate)
+//
+// usage: _LIGX_Duplicate what
+//
+//  what:
+//    'ligand'         a selected ligand will be duplicated
+//    'tag'            a selected tag will be duplicated
+//    'chain'          a selected chain will be duplicated
+//    'SystemManager"  the selected System Manager line will be duplicated
+//    [okeys, gobj]    specified object keys and graphics objs are duplicated
+//
+//  Following RC variables control the duplication results:
+//   LigX.duplicate.activate        show and activate duplicated objects
+//   LigX.duplicate.element         color duplicated atoms by element (rib: 2o)
+//   LigX.duplicate.render          copy rendering of objects
+//   LigX.duplicate.restraint       copy restraints of objects
+//   LigX.duplicate.graphics        duplicate also graphics objects from SysMan
+//   LigX.duplicate.stick           render duplicated ligands as stick
+//   LigX.duplicate.deactivateAll   when dup lig, hide/deactivate all other lig
+
+global function _LIGX_Duplicate what
+    if second task_fork [] <> 'child' then return; endif
+    task_settitle [-1, 'Duplicate'];
+
+    local old_prio = task_prio 0;
+    local okeys = [], gkeys = [], class = '';
+
+    if isnull what then what = 'ligand'; endif	// duplicate ligand by default
+
+	// Get Ligand atoms to be duplicated.
+
+    if what === 'ligand' then
+	okeys = get_dup_ligand [];
+	gkeys = [];		// TODO: find associated gobj
+	class = 'lig';
+
+	// Get tag objects to be duplicated.
+
+    elseif what === 'tag' then
+	okeys = get_dup_tag [];
+	gkeys = [];		// TODO: find associated gobj
+	class = 'tag';
+
+	// Get chain objects to be duplicated.
+
+    elseif what === 'chain' then
+	okeys = get_dup_chain [];
+	gkeys = [];		// TODO: find associated gobj
+	class = '';
+
+	// Get the System Manager line objects to be duplicated.
+
+    elseif what === 'SystemManager' then
+	local env = task_getenv [];
+	local line = env.SYSMAN_LINENO;
+	if line < 1 then return; endif
+
+	local sysman_info = SystemManager [];
+	okeys = sysman_info(1)(line);
+	class = sysman_info(2)(line);
+	gkeys = sysman_info(3)(line);
+	sysman_info = [];
+
+    else
+	[okeys, gkeys] = what;
+	class = '';
+
+	    // Check if given okeys belong to a ligand -> use ligand mode.
+
+	local islig = 'lig' == aClassRLS cat oAtoms okeys;
+	if alltrue islig and anytrue islig then class = 'lig'; endif
+
+	    // Check if given okeys are all chains of a tag -> use tag mode.
+
+	if alltrue ('chain' == oType okeys) then
+	    local tagid = uniq cTagId okeys;
+	    if length tagid == 1 then
+		if isnull diff [Chains[] | tagid == cTagId Chains[], okeys] then
+		    class = 'tag';
+		endif
+	    endif
+	endif
+    endif
+
+    UndoSnapshot[];
+
+    local rc_stick	   = GetRCBoolean ['LigX.duplicate.stick', 1];
+    local rc_deactivateAll = GetRCBoolean ['LigX.duplicate.deactivateAll', 0];
+    local rc_gobj	   = GetRCBoolean ['LigX.duplicate.graphics', 0];
+
+    local mode = select [
+	'tag', select ['lig', 'chain', class == 'lig'], class == 'tag'
+    ];
+
+    local opt = [
+	    activate:	   GetRCBoolean ['LigX.duplicate.activate',	 1]
+	,   stick:	   select [rc_stick, 0, mode == 'lig']
+	,   element:	   GetRCBoolean ['LigX.duplicate.element',	 1]
+	,   deactivateAll: select [rc_deactivateAll, 0, mode == 'lig']
+	,   render:	   GetRCBoolean ['LigX.duplicate.render',	 1]
+	,   restraint:	   GetRCBoolean ['LigX.duplicate.restraint',	 1]
+	,   message:	   1
+	,   mode:	   mode
+    ];
+
+    if not rc_gobj then gkeys = []; endif
+
+	// Duplicate receptor + solvent lines will not be visible
+	// as separate lines in basic view mode. Ask if Sysman
+	// should switch into extended view mode.
+#if 1
+    if what === 'SystemManager' then
+	if not indexof [class, ['lig', 'tag']] then
+	    if not GetRCBoolean ['SystemManager.partition_mode', 0] then
+		if YesNo
+		    'System Manager is currently in basic list view.\n'
+		    'mode. The duplicated objects will only be visible\n'
+		    'as separate lines in extended list view mode.\n\n'
+		    'Switch System Manager to extended list view?'
+		then
+		    SetRCBoolean ['SystemManager.partition_mode', 1];
+		endif
+	    endif
+	endif
+    endif
+#endif
+
+	// Do the duplication.
+
+    local natoms = duplicate_obj [okeys, gkeys, opt];
+
+    task_prio old_prio;
+    exit[];
+endfunction
+
+// -------------------------------- CONFIGURATION ----------------------------
+
+local function Surf_Hbox [title, stype, n]
+    local prefix = tok_cat ['QuickSurface.', stype];
+    return [
+	title: title,
+	Option : [
+	    name: tok_cat [prefix, '.dim'],
+	    text: ['Dot','Line','Solid']
+	],
+	Material : [
+	    name: tok_cat [prefix, '.material'],
+	    autoApply: 1,
+	    transparencyEnable: 1,
+	    frontbackEnable: 1
+	],
+	Option : [
+	    name: tok_cat [prefix, '.colorby'],
+	    onTrigger: 'return',
+	    text: [
+		'ActiveLP',
+		'Atom Color',
+		'Electrostatics',
+		'ElectrostaticsPB',
+		'Lipophilicity',
+		'Pocket', 'B-Factor',
+		'Carbon Color', 'Residue Color', 'Chain Color', 'Constant'
+	    ]
+	],
+	Color : [
+	    name: tok_cat [prefix, '.color'],
+	    sensitive: token GetRC tok_cat [prefix, '.colorby'] == 'Constant',
+	    extendV: 1,
+	    bubbleHelp:
+		'The color used for Constant coloring.'
+	]
+    ];
+endfunction
+
+global function RCConfig_info_LigX[]
+    local vtable =  [
+	[ 'LigX.exitVectorColor',		'trgb',	0x00A0FFA0	]
+    ,	[ 'LigX.exitVectorEnergy',		'num',	2.0		]
+    ,	[ 'LigX.exitVectorShowHiddenH',		'bool',	1		]
+    ,	[ 'LigX.duplicate.activate',		'bool',	1		]
+    ,	[ 'LigX.duplicate.stick',		'bool',	1		]
+    ,	[ 'LigX.duplicate.element',		'bool',	1		]
+    ,	[ 'LigX.duplicate.render',		'bool',	1		]
+    ,	[ 'LigX.minimizeV.msg',			'bool',	1		]
+    ,	[ 'LigX.minimizeV.msgtime',		'num',	10		]
+    ,	[ 'LigX.minimizeV.colorEnable',		'bool',	1		]
+    ,	[ 'LigX.minimizeV.color',		'trgb',	0xFFA880	]
+    ,	[ 'LigX.SiteView.cutoff',		'num',	4.5		]
+    ,	[ 'LigX.SiteView.toggle',		'bool',	0		]
+    ,	[ 'LigX.SiteView.preserveRender',	'bool',	0		]
+    ,	[ 'LigX.SiteView.ignoreInert',		'bool',	1		]
+    ,	[ 'QuickSurface.rec.dim',		'char',	'Solid'		]
+    ,	[ 'QuickSurface.rec.material',		'mat2',	0x00B2A6FF	]
+    ,	[ 'QuickSurface.rec.colorby',		'char',	'Atom Color'	]
+    ,	[ 'QuickSurface.rec.color',		'trgb',	icolor 'darkYellow']
+    ,	[ 'QuickSurface.lig.dim',		'char',	'Solid'		]
+    ,	[ 'QuickSurface.lig.material',		'mat2',	0x00B2A6FF	]
+    ,	[ 'QuickSurface.lig.colorby',		'char',	'Atom Color'	]
+    ,	[ 'QuickSurface.lig.color',		'trgb',	icolor 'darkYellow']
+    ,	[ 'QuickSurface.int.dim',		'char',	'Line'		]
+    ,	[ 'QuickSurface.int.material',		'mat2',	0x00BFF2FF	]
+    ,	[ 'QuickSurface.int.colorby',		'char',	'Carbon Color'	]
+    ,	[ 'QuickSurface.int.color',		'trgb',	0x00FFFFFF	]
+    ,	[ 'QuickSurface.pro.dim',		'char',	'Solid'		]
+    ,	[ 'QuickSurface.pro.material',		'mat2',	0x00A609FF	]
+    ,	[ 'QuickSurface.pro.colorby',		'char',	'Constant'	]
+    ,	[ 'QuickSurface.pro.color',		'trgb',	0x00F2F2F2	]
+    ,	[ 'QuickSurface.clear.all',		'bool',	0		]
+    ,	[ 'QuickSurface.replace.existing',	'bool',	1		]
+    ];
+    return  [ 'QuickPrep', vtable, [
+	Hbox : Surf_Hbox [ 'Ligand Surface:', 'lig' ],
+	Hbox : Surf_Hbox [ 'Receptor Surface:', 'rec' ],
+	Hbox : Surf_Hbox [ 'Interaction Surface:', 'int' ],
+	Hbox : Surf_Hbox [ 'Protein Surface:', 'pro' ],
+
+	Hbox : [
+	    title: 'Clear Surface:',
+	    Checkbox: [
+		text: 'Remove all surfaces',
+		name: 'QuickSurface.clear.all',
+		bubbleHelp:
+		    'If on, RHS | Surface | Clear will remove all surfaces.\n'
+		    'Otherwise only molecular, interaction and patch\n'
+		    'surfaces are deleted.'
+	    ],
+	    Checkbox: [
+		text: 'Replace existing',
+		name: 'QuickSurface.replace.existing',
+		bubbleHelp:
+		    'If on, newly created Quick Surfaces will automatically\n'
+		    'replace existing surfaces of the same type. Otherwise,\n'
+		    'a dialog to confirm the replacement will be raised.'
+	    ]
+	],
+
+	Separator : [ shadow: 'none' ],
+	Hbox : [
+	    Text : [
+		title: 'R-Vector:',
+		name: 'LigX.exitVectorEnergy', type: 'real', len: 10,
+		shortcut: ['1.0', '2.0', '3.0', '4.0', '5.0'],
+		bubbleHelp:
+		    'Ligand R-vectors are drawn if a methyl group\n'
+		    'can be substituted with van der Waals clash\n'
+		    'energy below the specified limit.'
+	    ],
+	    Label : [
+		text: ' kcal/mol vdW clash '
+	    ],
+	    Color : [
+		name: 'LigX.exitVectorColor',
+		transparency:1,
+		bubbleHelp:
+		    'The color of ligand R-vector arrows.'
+	    ]
+	],
+	Checkbox : [
+	    name: 'LigX.exitVectorShowHiddenH',
+	    text: 'Show R-vectors for hidden hydrogen atoms',
+	    bubbleHelp:
+		'If on, ligand R-vectors will be shown even if the\n'
+		'hydrogen atom involved is hidden.'
+	],
+
+	Vbox : [
+	    title: 'Duplicate:',
+
+	    Hbox : [
+		columns: 2,
+		Checkbox : [
+		    name: 'LigX.duplicate.activate',
+		    text: 'Activate+Show',
+		    bubbleHelp:
+			'Activate and show newly created atoms.'
+		],
+		Checkbox : [
+		    name: 'LigX.duplicate.render',
+		    text: 'Copy Render Style',
+		    bubbleHelp:
+			'Copy render style during duplication.'
+		],
+		Checkbox : [
+		    name: 'LigX.duplicate.stick',
+		    text: 'Ligand Stick',
+		    bubbleHelp:
+			'When duplicating ligands, show all newly\n'
+			'created atoms and render them in stick mode.'
+		],
+		Checkbox : [
+		    name: 'LigX.duplicate.element',
+		    text: 'Element Color',
+		    bubbleHelp:
+			'Color newly created atoms by element.\n'
+			'Ribbons will be colored by secondary structure.'
+		]
+	    ]
+	],
+
+	Hbox : [
+	    title: 'Minimize (Vac):',
+	    Checkbox : [
+		name: 'LigX.minimizeV.msg',
+		text: 'Display message for'
+	    ],
+	    Text : [
+		name: 'LigX.minimizeV.msgtime',
+		len: 8, type: 'real',
+		shortcut: ['5', '10', '15']
+	    ],
+	    Label : [ text:' seconds' ]
+	],
+	Hbox : [
+	    Checkbox : [
+		name: 'LigX.minimizeV.colorEnable',
+		text: 'Color newly created carbons'
+	    ],
+	    Color : [
+		name: 'LigX.minimizeV.color'
+	    ]
+	],
+
+	Mbox: [
+	    columns: 2,
+	    Hbox : [
+		Text : [
+		    title: 'SiteView:',
+		    name: 'LigX.SiteView.cutoff',
+		    len: 8, type: 'real',
+		    shortcut: ['4.5', '8', '12'],
+		    bubbleHelp:
+			'Distance cutoff used to identify residues\n'
+			'near ligand to display.'
+		],
+		Label : [ text:' \xc3\x85 cutoff ' ]
+	    ],
+	    Checkbox: [
+		name: 'LigX.SiteView.toggle', text: 'Toggle Site',
+		bubbleHelp:
+		    'If on, the SiteView button will toggle between\n'
+		    'displaying just the ligand in its binding site\n'
+		    'and reshowing the structure outside the ligand\n'
+		    'binding site.'
+	    ],
+	    Checkbox : [
+		name: 'LigX.SiteView.preserveRender',
+		text: 'Preserve Render Style',
+		bubbleHelp:
+		    'If on, the current atom rendering style\n'
+		    'will not be changed.'
+	    ],
+	    Checkbox : [
+		name: 'LigX.SiteView.ignoreInert',
+		text: 'Ignore Inert',
+		bubbleHelp:
+		    'If on, residues which have all atoms hidden\n'
+		    'and inert will not be affected; their visibility\n'
+		    'and rendering will remain unchanged.'
+	    ]
+	]
+    ]];
+endfunction
+
+global function RCConfig_trigger_LigX [wkey, trigger, value]
+    if m_findmatch ['QuickSurface.*.colorby', trigger] then
+	WindowSetAttr [wkey, tag [
+	    tok_cat [tok_drop [trigger, -7], 'color'],
+	    nest [sensitive: value == 'Constant']
+	]];
+    endif
+endfunction
+#eof
